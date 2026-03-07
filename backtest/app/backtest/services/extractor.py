@@ -75,8 +75,10 @@ def _extract_equity(portfolio_df) -> dict | None:
         return {"dates": [], "nav": [], "returns": [], "benchmark_nav": []}
     dates = [str(d.date()) if hasattr(d, "date") else str(d) for d in portfolio_df.index]
     # Try multiple column names for NAV (支持股票和期货)
+    # 对期货：total_value是实际账户价值，优先级最高
+    # 对股票：unit_net_value是单位净值，也支持
     nav = []
-    for nav_col in ("unit_net_value", "nav", "value", "portfolio_value"):
+    for nav_col in ("total_value", "unit_net_value", "nav", "value", "portfolio_value"):
         if nav_col in portfolio_df.columns:
             nav = portfolio_df[nav_col].tolist()
             break

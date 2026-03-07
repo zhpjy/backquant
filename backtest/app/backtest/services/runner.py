@@ -1376,6 +1376,9 @@ def build_config_yaml(
     if not result_path.is_absolute():
         raise ValueError("output_file must be an absolute path")
 
+    # Derive progress file path from result file
+    progress_path = result_path.parent / "progress.json"
+
     return textwrap.dedent(
         f"""\
         version: 0.1.6
@@ -1396,6 +1399,9 @@ def build_config_yaml(
             enabled: true
             plot: false
             output_file: {result_path}
+          sys_progress:
+            enabled: true
+            output_file: {progress_path}
         """
     )
 
@@ -1811,6 +1817,7 @@ def _build_research_config(
     result_pickle = (output_dir / "result.pkl").resolve()
     report_dir = (output_dir / "report").resolve()
     log_path = (output_dir / "backtest.log").resolve()
+    progress_file = (output_dir / "progress.json").resolve()
     config: dict[str, object] = {
         "base": {
             "strategy_file": str(strategy_path.resolve()),
@@ -1836,6 +1843,10 @@ def _build_research_config(
                 "output_file": str(result_pickle),
                 "report_save_path": str(report_dir),
                 "benchmark": benchmark,
+            },
+            "sys_progress": {
+                "enabled": True,
+                "output_file": str(progress_file),
             }
         },
     }

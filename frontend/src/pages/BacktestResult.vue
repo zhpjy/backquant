@@ -62,7 +62,10 @@
           </div>
           <div class="panel-body">
             <div v-if="jobStatus !== 'FINISHED'" class="inline-hint">
-              <div class="hint-title">回测进行中</div>
+              <div class="hint-title">
+                回测进行中（{{ jobProgressStage }}）
+                <span class="progress-percent">{{ jobProgressPercent }}%</span>
+              </div>
               <div class="progress">
                 <div class="bar" :style="{ width: jobProgressPercent + '%' }" />
               </div>
@@ -400,6 +403,10 @@ export default {
       activeTab: 'overview',
       jobStatus: 'QUEUED',
       jobError: '',
+      jobProgress: {
+        percentage: 0,
+        stage: 'queued',
+      },
       loadingJob: false,
       loadingResult: false,
       loadingLog: false,
@@ -442,11 +449,29 @@ export default {
       return 'QUEUED';
     },
     jobProgressPercent() {
+      // Use actual progress data if available (from sys_progress module)
+      if (this.jobProgress && typeof this.jobProgress.percentage === 'number') {
+        return Math.min(Math.max(this.jobProgress.percentage, 0), 100);
+      }
+      // Fallback to status-based estimation
       const status = (this.jobStatus || 'QUEUED').toUpperCase();
-      if (status === 'RUNNING') return 66;
+      if (status === 'RUNNING') return 50;
       if (status === 'FINISHED') return 100;
       if (status === 'FAILED' || status === 'CANCELLED') return 100;
       return 24;
+    },
+    jobProgressStage() {
+      const stage = this.jobProgress && this.jobProgress.stage ? this.jobProgress.stage : 'unknown';
+      const stageLabels = {
+        'queued': '排队中',
+        'backtesting': '回测中',
+        'analyzing': '分析中',
+        'finished': '已完成',
+        'failed': '失败',
+        'cancelled': '已取消',
+        'unknown': '处理中',
+      };
+      return stageLabels[stage] || stageLabels.unknown;
     },
     summaryPayload() {
       const result = this.resultData || {};
@@ -924,11 +949,29 @@ export default {
         this.loadingJob = false;
       }
     },
+    async fetchProgressOnce() {
+      if (!this.runId || this.jobStatus === 'FINISHED' || this.jobStatus === 'FAILED' || this.jobStatus === 'CANCELLED') {
+        return;
+      }
+      try {
+        const response = await this.$http.get(`/api/backtest/jobs/${this.runId}/progress`);
+        const data = response.data || {};
+        if (data.progress && typeof data.progress === 'object') {
+          this.jobProgress = {
+            percentage: typeof data.progress.percentage === 'number' ? data.progress.percentage : 0,
+            stage: typeof data.progress.stage === 'string' ? data.progress.stage : 'unknown',
+          };
+        }
+      } catch (error) {
+        // Progress fetch failure is non-critical, silently continue
+      }
+    },
     startPolling() {
       if (this.pollTimer) return;
       this.pollTimer = setInterval(() => {
         this.fetchJobOnce(true);
-      }, 2000);
+        this.fetchProgressOnce();
+      }, 1000);
     },
     stopPolling() {
       if (this.pollTimer) {
@@ -1367,6 +1410,15 @@ export default {
 .hint-title {
   font-weight: 900;
   color: #0f172a;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.progress-percent {
+  font-size: 12px;
+  color: #666;
+  font-weight: 400;
 }
 
 .hint-sub {

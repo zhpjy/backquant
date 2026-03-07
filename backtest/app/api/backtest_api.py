@@ -856,6 +856,67 @@ def api_job_status(job_id: str):
     )
 
 
+@bp_backtest.get("/jobs/<job_id>/progress")
+@auth_required
+def api_job_progress(job_id: str):
+    """Get detailed progress information for a running backtest job.
+
+    Returns RQAlpha sys_progress output if available, or a fallback estimate
+    based on job status.
+    """
+    job_dir = locate_job_dir(job_id)
+    if job_dir is None:
+        return _error_response(404, "NOT_FOUND", "not found")
+
+    try:
+        status_payload = read_status(job_dir)
+    except (FileNotFoundError, OSError, ValueError):
+        return _error_response(404, "STATUS_NOT_FOUND", "status not found")
+
+    status = status_payload.get("status")
+
+    # Try to read RQAlpha's sys_progress output
+    progress_file = job_dir / "progress.json"
+    if progress_file.exists():
+        try:
+            progress_data = json.loads(progress_file.read_text(encoding="utf-8"))
+            # RQAlpha sys_progress provides detailed progress
+            return jsonify({
+                "job_id": job_id,
+                "status": status,
+                "progress": progress_data,
+            })
+        except (OSError, json.JSONDecodeError):
+            pass  # Fall through to default progress
+
+    # Fallback: estimate progress based on status
+    default_progress = {
+        "percentage": 0,
+        "stage": "queued",
+    }
+    if status == "RUNNING":
+        default_progress = {
+            "percentage": 50,
+            "stage": "backtesting",
+        }
+    elif status == "FINISHED":
+        default_progress = {
+            "percentage": 100,
+            "stage": "finished",
+        }
+    elif status in ("FAILED", "CANCELLED"):
+        default_progress = {
+            "percentage": 100,
+            "stage": status.lower(),
+        }
+
+    return jsonify({
+        "job_id": job_id,
+        "status": status,
+        "progress": default_progress,
+    })
+
+
 @bp_backtest.delete("/jobs/<job_id>")
 @auth_required
 def api_delete_job(job_id: str):

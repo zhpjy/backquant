@@ -74,11 +74,12 @@ def _extract_equity(portfolio_df) -> dict | None:
     if not hasattr(portfolio_df, "index") or not hasattr(portfolio_df, "columns"):
         return {"dates": [], "nav": [], "returns": [], "benchmark_nav": []}
     dates = [str(d.date()) if hasattr(d, "date") else str(d) for d in portfolio_df.index]
-    nav = (
-        portfolio_df["unit_net_value"].tolist()
-        if "unit_net_value" in portfolio_df.columns
-        else []
-    )
+    # Try multiple column names for NAV (支持股票和期货)
+    nav = []
+    for nav_col in ("unit_net_value", "nav", "value", "portfolio_value"):
+        if nav_col in portfolio_df.columns:
+            nav = portfolio_df[nav_col].tolist()
+            break
     returns = (
         portfolio_df["returns"].tolist()
         if "returns" in portfolio_df.columns
@@ -267,7 +268,15 @@ def extract_result(result_pkl: Path, out_json: Path) -> dict:
     summary = r.get("summary", {})
     if not isinstance(summary, dict):
         summary = {}
-    equity = _extract_equity(r.get("portfolio")) if "portfolio" in r else None
+
+    # 支持多种portfolio字段名（股票、期货、混合）
+    portfolio = None
+    for portfolio_key in ("portfolio", "future_portfolio", "stock_portfolio", "portfolios"):
+        if portfolio_key in r:
+            portfolio = r[portfolio_key]
+            break
+
+    equity = _extract_equity(portfolio) if portfolio is not None else None
     benchmark_nav = _extract_benchmark_nav(r)
     if not isinstance(equity, dict):
         equity = {"dates": [], "nav": [], "returns": [], "benchmark_nav": []}

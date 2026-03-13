@@ -142,3 +142,40 @@ ON DUPLICATE KEY UPDATE id=id;
 
 -- Note: User initialization is handled by the application
 -- The application will create the default admin user on first startup
+
+-- ============================================================================
+-- 5. VnPy Futures Bar Data (in backquant database)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS dbbardata (
+    id int(11) NOT NULL AUTO_INCREMENT,
+    symbol varchar(255) NOT NULL,
+    exchange varchar(255) NOT NULL,
+    datetime datetime NOT NULL,
+    `interval` varchar(255) NOT NULL,
+    volume double NOT NULL,
+    turnover double NOT NULL,
+    open_interest double NOT NULL,
+    open_price double NOT NULL,
+    high_price double NOT NULL,
+    low_price double NOT NULL,
+    close_price double NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY dbbardata_symbol_exchange_interval_datetime (symbol, exchange, `interval`, datetime),
+    KEY idx_dbbardata_exchange (exchange)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ============================================================================
+-- 6. VNPY Stats Cache (in backquant database)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS vnpy_stats (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    total_rows BIGINT DEFAULT 0,
+    contract_count INTEGER DEFAULT 0,
+    exchange_count INTEGER DEFAULT 0,
+    min_date VARCHAR(30),
+    max_date VARCHAR(30),
+    by_exchange JSON,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

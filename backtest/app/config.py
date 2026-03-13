@@ -89,6 +89,8 @@ class Config:
     DB_NAME = _str_from_env("DB_NAME", "backquant")
     DB_USER = _str_from_env("DB_USER", "root")
     DB_PASSWORD = _str_from_env("DB_PASSWORD", "")
+    # VnPy futures bar data table
+    DB_TABLE = _str_from_env("DB_TABLE", "dbbardata")
     # Research workbench storage and notebook session settings.
     # RESEARCH_PUBLIC_BASE_URL is optional; when empty, request.host_url is used.
     RESEARCH_PUBLIC_BASE_URL = _str_from_env("RESEARCH_PUBLIC_BASE_URL", "")

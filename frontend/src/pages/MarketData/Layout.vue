@@ -58,6 +58,12 @@ export default {
           iconPath: 'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'
         },
         {
+          id: 'vnpy',
+          label: 'VNPY管理',
+          path: '/market-data/vnpy',
+          iconPath: 'M13 10V3L4 14h7v7l9-11h-7z'
+        },
+        {
           id: 'logs',
           label: '运行日志',
           path: '/market-data/logs',

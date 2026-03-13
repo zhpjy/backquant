@@ -52,6 +52,10 @@ const MarketDataLogs = () => import(
   /* webpackChunkName: "route-market-data" */
   '@/pages/MarketData/Logs.vue'
 );
+const MarketDataVnpy = () => import(
+  /* webpackChunkName: "route-market-data" */
+  '@/pages/MarketData/Vnpy.vue'
+);
 
 const routes = [
     { path: '/', redirect: '/login' },
@@ -71,6 +75,7 @@ const routes = [
         { path: 'overview', component: MarketDataOverview, name: 'market-data-overview' },
         { path: 'config', component: MarketDataConfig, name: 'market-data-config' },
         { path: 'packages', component: MarketDataPackages, name: 'market-data-packages' },
+        { path: 'vnpy', component: MarketDataVnpy, name: 'market-data-vnpy' },
         { path: 'logs', component: MarketDataLogs, name: 'market-data-logs' }
       ]
     },

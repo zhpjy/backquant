@@ -36,6 +36,11 @@ reports/
 .bmad-state.json
 bmad.log
 
+# VnPy source archives (installed via Dockerfile)
+backtest/vnpy-*/
+backtest/vnpy_ctp/
+backtest/*.tar.gz
+
 .bmad-temp/
 .bmad-cache/
 *.bmad.log

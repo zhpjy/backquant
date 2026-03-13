@@ -72,7 +72,7 @@ class TaskManager:
         with self.lock:
             # Allow auto tasks to be submitted even when there's a running task
             # This is needed for chained tasks (e.g., download -> analyze)
-            if source != 'auto' and self._has_running_task():
+            if source != 'auto' and self._has_running_task(task_type):
                 raise RuntimeError("已有任务正在运行，请等待完成后再试")
 
             task_id = str(uuid.uuid4())
@@ -80,12 +80,22 @@ class TaskManager:
             self.task_queue.put((task_id, task_func, task_args))
             return task_id
 
-    def _has_running_task(self) -> bool:
-        """Check if there is a running task."""
+    def _has_running_task(self, task_type: str = None) -> bool:
+        """Check if there is a running task of the same category.
+
+        vnpy_import tasks are independent from other market data tasks.
+        """
         with self._get_db_connection() as db:
-            row = db.fetchone(
-                "SELECT COUNT(*) as count FROM market_data_tasks WHERE status IN ('pending', 'running')"
-            )
+            if task_type == 'vnpy_import':
+                row = db.fetchone(
+                    "SELECT COUNT(*) as count FROM market_data_tasks "
+                    "WHERE status IN ('pending', 'running') AND task_type = 'vnpy_import'"
+                )
+            else:
+                row = db.fetchone(
+                    "SELECT COUNT(*) as count FROM market_data_tasks "
+                    "WHERE status IN ('pending', 'running') AND task_type != 'vnpy_import'"
+                )
             return (row['count'] if row else 0) > 0
 
     def _create_task(self, task_id: str, task_type: str, source: str):
@@ -151,6 +161,32 @@ class TaskManager:
                    ORDER BY created_at DESC
                    LIMIT 1"""
             )
+
+    def get_running_task_by_type(self, task_type: str) -> Optional[dict]:
+        """Get currently running or pending task of a specific type."""
+        with self._get_db_connection() as db:
+            return db.fetchone(
+                """SELECT * FROM market_data_tasks
+                   WHERE status IN ('pending', 'running') AND task_type = ?
+                   ORDER BY created_at DESC
+                   LIMIT 1""",
+                (task_type,)
+            )
+
+    def cancel_task(self, task_id: str) -> bool:
+        """Cancel a pending or running task by marking it as cancelled."""
+        with self._get_db_connection() as db:
+            row = db.fetchone(
+                "SELECT status FROM market_data_tasks WHERE task_id = ?",
+                (task_id,)
+            )
+            if not row or row['status'] not in ('pending', 'running'):
+                return False
+            db.execute(
+                "UPDATE market_data_tasks SET status = 'cancelled', finished_at = ? WHERE task_id = ?",
+                (datetime.utcnow().isoformat(), task_id)
+            )
+            return True
 
 
 # Global singleton

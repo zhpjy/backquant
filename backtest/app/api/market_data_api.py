@@ -2,6 +2,7 @@
 from flask import Blueprint, jsonify, request
 from pathlib import Path
 import os
+import sys
 from datetime import datetime
 
 from app.auth import auth_required
@@ -186,6 +187,23 @@ def retry_task(task_id: str):
         return jsonify({'error': str(e)}), 500
 
 
+@bp_market_data.route('/tasks/<task_id>/logs', methods=['GET'])
+@auth_required
+def get_task_logs(task_id: str):
+    """Get logs for a specific task."""
+    try:
+        limit = request.args.get('limit', 100, type=int)
+        with get_db_connection('market_data') as db:
+            logs = db.fetchall(
+                "SELECT * FROM market_data_task_logs WHERE task_id = ? "
+                "ORDER BY timestamp ASC LIMIT ?",
+                (task_id, limit)
+            )
+        return jsonify({'logs': logs}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @bp_market_data.route('/cron/config', methods=['GET'])
 @auth_required
 def get_cron_config():
@@ -354,3 +372,218 @@ def get_cron_log_detail(log_id: int):
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# VNPY Futures Data Management
+# ============================================================================
+
+def _refresh_vnpy_stats_to_db(config_dict=None):
+    """Query dbbardata live stats and save to vnpy_stats cache table."""
+    import json
+
+    table = os.environ.get('DB_TABLE', 'dbbardata')
+
+    with get_db_connection(config_dict=config_dict) as db:
+        # Single scan: get all stats + per-exchange breakdown in one query
+        by_exchange = db.fetchall(
+            f"SELECT exchange, COUNT(DISTINCT symbol) AS contracts, COUNT(*) AS `rows`, "
+            f"MIN(datetime) AS min_dt, MAX(datetime) AS max_dt "
+            f"FROM {table} GROUP BY exchange ORDER BY `rows` DESC"
+        )
+
+        total_rows = sum(r['rows'] for r in by_exchange)
+        contract_count = sum(r['contracts'] for r in by_exchange)
+        exchange_count = len(by_exchange)
+        min_date = min((str(r['min_dt']) for r in by_exchange if r['min_dt']), default=None)
+        max_date = max((str(r['max_dt']) for r in by_exchange if r['max_dt']), default=None)
+
+        # Strip min_dt/max_dt from per-exchange results before caching
+        by_exchange_out = [
+            {'exchange': r['exchange'], 'contracts': r['contracts'], 'rows': r['rows']}
+            for r in by_exchange
+        ]
+
+        # Write to vnpy_stats cache
+        db.execute("DELETE FROM vnpy_stats WHERE id = 1")
+        db.execute(
+            "INSERT INTO vnpy_stats (id, total_rows, contract_count, exchange_count, "
+            "min_date, max_date, by_exchange) VALUES (1, ?, ?, ?, ?, ?, ?)",
+            (total_rows, contract_count, exchange_count,
+             min_date, max_date, json.dumps(by_exchange_out))
+        )
+
+    return {
+        'total_rows': total_rows,
+        'contract_count': contract_count,
+        'exchange_count': exchange_count,
+        'min_date': min_date,
+        'max_date': max_date,
+        'by_exchange': by_exchange_out,
+    }
+
+
+@bp_market_data.route('/vnpy/stats', methods=['GET'])
+@auth_required
+def get_vnpy_stats():
+    """Get dbbardata table statistics from cache."""
+    import json
+    try:
+        with get_db_connection('market_data') as db:
+            row = db.fetchone("SELECT * FROM vnpy_stats WHERE id = 1")
+
+        if not row:
+            return jsonify({
+                'total_rows': 0,
+                'contract_count': 0,
+                'exchange_count': 0,
+                'min_date': None,
+                'max_date': None,
+                'by_exchange': [],
+                'updated_at': None,
+            }), 200
+
+        by_exchange = row.get('by_exchange')
+        if isinstance(by_exchange, str):
+            by_exchange = json.loads(by_exchange)
+
+        return jsonify({
+            'total_rows': row['total_rows'],
+            'contract_count': row['contract_count'],
+            'exchange_count': row['exchange_count'],
+            'min_date': row['min_date'],
+            'max_date': row['max_date'],
+            'by_exchange': by_exchange or [],
+            'updated_at': str(row['updated_at']) if row.get('updated_at') else None,
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp_market_data.route('/vnpy/refresh-stats', methods=['POST'])
+@auth_required
+def refresh_vnpy_stats():
+    """Manually refresh vnpy stats cache from live data."""
+    try:
+        result = _refresh_vnpy_stats_to_db()
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp_market_data.route('/vnpy/running-task', methods=['GET'])
+@auth_required
+def get_vnpy_running_task():
+    """Get currently running vnpy_import task, if any."""
+    try:
+        tm = get_task_manager()
+        task = tm.get_running_task_by_type('vnpy_import')
+        if task:
+            return jsonify(task), 200
+        return jsonify(None), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp_market_data.route('/vnpy/cancel/<task_id>', methods=['POST'])
+@auth_required
+def cancel_vnpy_task(task_id: str):
+    """Cancel a running vnpy_import task."""
+    try:
+        tm = get_task_manager()
+        ok = tm.cancel_task(task_id)
+        if ok:
+            return jsonify({'message': '任务已取消'}), 200
+        return jsonify({'error': '无法取消该任务（可能已完成）'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp_market_data.route('/vnpy/import', methods=['POST'])
+@auth_required
+def trigger_vnpy_import():
+    """Trigger futures data import from rqalpha bundle into MariaDB."""
+    try:
+        bundle_path = _get_bundle_path()
+        h5_path = bundle_path / 'futures.h5'
+        pk_path = bundle_path / 'instruments.pk'
+
+        if not h5_path.exists():
+            return jsonify({'error': f'futures.h5 不存在: {h5_path}'}), 400
+        if not pk_path.exists():
+            return jsonify({'error': f'instruments.pk 不存在: {pk_path}'}), 400
+
+        tm = get_task_manager()
+        task_id = tm.submit_task(
+            'vnpy_import',
+            _do_vnpy_import,
+            (str(h5_path), str(pk_path)),
+            source='manual',
+        )
+        return jsonify({'task_id': task_id}), 200
+
+    except RuntimeError as e:
+        return jsonify({'error': str(e)}), 409
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def _do_vnpy_import(task_id: str, h5_path: str, pk_path: str):
+    """Run the import script as a subprocess, streaming logs to TaskManager."""
+    import subprocess
+
+    tm = get_task_manager()
+    tm.update_progress(task_id, 0, '导入', '启动期货数据导入...')
+    tm.log(task_id, 'INFO', f'h5={h5_path}, pk={pk_path}')
+
+    script = str(Path(__file__).resolve().parent.parent.parent / 'scripts' / 'import_rqalpha_futures_to_mariadb.py')
+
+    cmd = [
+        sys.executable, script,
+        '--h5', h5_path,
+        '--pk', pk_path,
+    ]
+
+    # 9-step progress: Reading futures.h5 gets the largest share (15%→55%)
+    step_progress = [
+        ('Loading instruments.pk', 5),
+        ('Loaded exchange map', 10),
+        ('Reading futures.h5', 15),
+        ('Parsed rows', 55),
+        ('Truncating table', 65),
+        ('Loading data into MariaDB', 75),
+        ('Import finished', 85),
+    ]
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+    current_pct = 0
+    for line in proc.stdout:
+        line = line.rstrip('\n')
+        if not line:
+            continue
+        tm.log(task_id, 'INFO', line)
+
+        for keyword, pct in step_progress:
+            if keyword in line:
+                current_pct = pct
+                break
+
+        tm.update_progress(task_id, current_pct, '导入', line)
+
+    proc.wait()
+    if proc.returncode != 0:
+        raise RuntimeError(f'导入脚本退出码: {proc.returncode}')
+
+    tm.update_progress(task_id, 90, '统计', '正在刷新统计数据...')
+    tm.log(task_id, 'INFO', '导入完成，刷新统计缓存...')
+    _refresh_vnpy_stats_to_db(config_dict=tm.db_config_dict)
+
+    tm.update_progress(task_id, 100, '完成', '期货数据导入完成')

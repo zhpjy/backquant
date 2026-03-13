@@ -6,6 +6,7 @@ services:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-backquant}
       MYSQL_USER: ${MYSQL_USER:-backquant_user}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-backquant_pass}
+      # MYSQL_EXTRA_DATABASE: not needed, all tables in backquant
     volumes:
       - mariadb_data:/var/lib/mysql
       - ./backtest/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -47,6 +48,7 @@ services:
       DB_NAME: ${DB_NAME:-backquant}
       DB_USER: ${DB_USER:-backquant_user}
       DB_PASSWORD: ${DB_PASSWORD:-backquant_pass}
+      DB_TABLE: ${DB_TABLE:-dbbardata}
     volumes:
       - backtest_data:/data/backtest
       - rqalpha_bundle:/data/rqalpha/bundle

@@ -18,6 +18,9 @@
           <div class="progress-bar-fill" :style="{ width: task.progress + '%' }"></div>
         </div>
         <p class="progress-message">{{ task.message }}</p>
+        <div v-if="cancelable && !isTerminal" class="modal-footer">
+          <button @click="$emit('cancel')" class="btn btn-danger">取消任务</button>
+        </div>
       </div>
     </div>
   </div>
@@ -30,6 +33,10 @@ export default {
     taskId: {
       type: String,
       required: true
+    },
+    cancelable: {
+      type: Boolean,
+      default: false
     }
   },
   data() {
@@ -47,6 +54,9 @@ export default {
   computed: {
     isDownloadTask() {
       return this.task.task_type === 'full' || this.task.task_type === 'incremental';
+    },
+    isTerminal() {
+      return ['success', 'failed', 'cancelled'].includes(this.task.status);
     },
     stageLabel() {
       const stages = {
@@ -220,5 +230,34 @@ export default {
   margin: 0;
   font-size: 12px;
   color: #666;
+}
+
+.modal-footer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #e0e0e0;
+  text-align: right;
+}
+
+.btn {
+  border: 1px solid #d0d0d0;
+  background: #fff;
+  color: #000;
+  padding: 6px 12px;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.btn-danger {
+  background: #d32f2f;
+  color: #fff;
+  border-color: #d32f2f;
+}
+
+.btn-danger:hover {
+  background: #c62828;
+  border-color: #c62828;
 }
 </style>

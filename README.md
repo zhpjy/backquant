@@ -52,9 +52,9 @@ docker compose up --build -d
 
 ### 系统截图
 
-![Screenshot 0](images/screen0.png)
-![Screenshot 1](images/screen1.png)
-![Screenshot 3](images/screen3.png)
+![Screenshot 0](images/screen0.png?v=2)
+![Screenshot 1](images/screen1.png?v=2)
+![Screenshot 3](images/screen3.png?v=2)
 
 - screen0：回测工作台 — 策略回测结果与收益曲线
 - screen1：数据管理 — VNPY 期货数据管理（按交易所统计、饼图分布）

@@ -56,10 +56,6 @@ docker compose up --build -d
 ![Screenshot 1](images/screen1.png?v=2)
 ![Screenshot 3](images/screen3.png?v=2)
 
-- screen0：回测工作台 — 策略回测结果与收益曲线
-- screen1：数据管理 — VNPY 期货数据管理（按交易所统计、饼图分布）
-- screen3：研究工作台 — Jupyter Lab 中编写 VnPy CTA 期货策略
-
 ## 二、配置说明
 
 后端主要配置在 `backtest/.env.wsgi`：

@@ -4,6 +4,7 @@ import json
 import os
 import secrets
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
@@ -421,6 +422,7 @@ def _notebook_api_request(
     path: str,
     *,
     token: str | None = None,
+    json_body: dict | None = None,
 ) -> requests.Response | None:
     base = _notebook_api_base_url()
     if not base:
@@ -450,7 +452,7 @@ def _notebook_api_request(
 
     if auth_token:
         try:
-            return requests.request(method, url, headers=headers, timeout=timeout)
+            return requests.request(method, url, headers=headers, timeout=timeout, json=json_body)
         except requests.RequestException:
             return None
 
@@ -481,14 +483,29 @@ def _notebook_api_request(
                 origin = f"{parts.scheme}://{parts.netloc}"
                 headers.setdefault("Origin", origin)
                 headers.setdefault("Referer", base_url)
-                return session.request(method, url, headers=headers, timeout=timeout)
+                return session.request(method, url, headers=headers, timeout=timeout, json=json_body)
         except requests.RequestException:
             return None
 
     try:
-        return requests.request(method, url, headers=headers, timeout=timeout)
+        return requests.request(method, url, headers=headers, timeout=timeout, json=json_body)
     except requests.RequestException:
         return None
+
+
+def _wait_for_notebook_server_ready(*, timeout_seconds: int = 20) -> bool:
+    """Wait until Jupyter API is ready to serve requests."""
+    base = _notebook_api_base_url()
+    if not base:
+        return True
+
+    deadline = time.time() + max(1, timeout_seconds)
+    while time.time() < deadline:
+        response = _notebook_api_request("GET", "/api")
+        if response is not None and response.status_code == 200:
+            return True
+        time.sleep(0.5)
+    return False
 
 
 def _candidate_notebook_paths(notebook_path: str) -> set[str]:
@@ -646,6 +663,40 @@ def _sync_session_with_jupyter(session: dict) -> bool:
             changed = True
 
     return changed
+
+
+def _ensure_jupyter_session_running(session: dict) -> tuple[bool, str | None]:
+    """Ensure a real Jupyter session/kernel exists for the notebook."""
+    if not _notebook_api_base_url():
+        return True, None
+
+    if not _wait_for_notebook_server_ready():
+        return False, "notebook server is still starting"
+
+    auth_token = _resolve_notebook_api_token_for_session(session)
+    notebook_path = str(session.get("notebook_path") or "").strip()
+    kernel_name = str(session.get("kernel") or _DEFAULT_KERNEL).strip() or _DEFAULT_KERNEL
+
+    existing = _find_jupyter_session_for_notebook(notebook_path=notebook_path, token=auth_token)
+    if existing is None:
+        response = _notebook_api_request(
+            "POST",
+            "/api/sessions",
+            token=auth_token,
+            json_body={
+                "path": notebook_path,
+                "name": Path(notebook_path).name,
+                "type": "notebook",
+                "kernel": {"name": kernel_name},
+            },
+        )
+        if response is None:
+            return False, "failed to contact notebook server"
+        if response.status_code not in {200, 201}:
+            return False, f"failed to create jupyter session (status {response.status_code})"
+
+    _sync_session_with_jupyter(session)
+    return True, None
 
 
 def _shutdown_kernel_for_session(session: dict, *, notebook_path_override: str | None = None) -> tuple[bool, str | None]:
@@ -1197,6 +1248,9 @@ def api_create_notebook_session(research_id: str):
                         _hydrate_session_urls(existing)
                     except ValueError as exc:
                         return _error(str(exc), 409)
+                    ok, message = _ensure_jupyter_session_running(existing)
+                    if not ok:
+                        return _error(message or "failed to start notebook session", 503)
                     sessions[normalized_id] = existing
                     _save_sessions(sessions)
                     return jsonify({"session": _session_response(existing)}), 200
@@ -1219,6 +1273,9 @@ def api_create_notebook_session(research_id: str):
                 "expires_at": _iso(now + ttl),
             }
             _hydrate_session_urls(session)
+            ok, message = _ensure_jupyter_session_running(session)
+            if not ok:
+                return _error(message or "failed to start notebook session", 503)
             sessions[normalized_id] = session
             _save_sessions(sessions)
 

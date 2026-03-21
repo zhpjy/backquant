@@ -21,7 +21,6 @@ services:
   backend:
     build:
       context: ./backtest
-    image: backquant-backend
     environment:
       CONFIG_ENV: production
       SECRET_KEY: ${SECRET_KEY:-change-me}
@@ -61,7 +60,8 @@ services:
     restart: unless-stopped
 
   jupyter:
-    image: backquant-backend
+    build:
+      context: ./backtest
     environment:
       JUPYTER_TOKEN: ${JUPYTER_TOKEN:-}
       RQALPHA_BUNDLE_BOOTSTRAP: "0"

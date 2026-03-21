@@ -12,6 +12,7 @@ def create_app(config_name):
     from .api.market_data_api import bp_market_data
     from .api.packages_api import bp_packages
     from .backtest.services.runner import ensure_default_demo_strategy
+    from .database import get_db_connection, get_db_type
     from .market_data.scheduler import init_scheduler
     from flask import Flask
     from flask_cors import CORS
@@ -30,13 +31,17 @@ def create_app(config_name):
     try:
         with app.app_context():
             ensure_default_demo_strategy()
-            # Initialize market data database before scheduler
-            from .market_data.db_init import init_database
+            # Initialize database schema before background services start.
+            from .market_data.db_init import init_database, init_database_with_connection
             from .market_data.utils import get_market_data_db_path
             from .api.packages_api import refresh_packages_cache
             db_path = get_market_data_db_path()
             db_path.parent.mkdir(parents=True, exist_ok=True)
-            init_database(db_path)
+            if get_db_type() == "mariadb":
+                with get_db_connection("market_data") as db:
+                    init_database_with_connection(db)
+            else:
+                init_database(db_path)
             init_scheduler()
             # Initialize Python packages cache
             refresh_packages_cache()

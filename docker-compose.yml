@@ -18,6 +18,26 @@ services:
       retries: 3
       start_period: 30s
 
+  db-init:
+    image: mariadb:11.2
+    environment:
+      MYSQL_PWD: ${MYSQL_ROOT_PASSWORD:-backquant_root_pass}
+    volumes:
+      - ./backtest/db/init.sql:/init.sql:ro
+    command: >
+      sh -c "
+      mariadb
+      --host=mariadb
+      --port=3306
+      --user=root
+      ${MYSQL_DATABASE:-backquant}
+      < /init.sql
+      "
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    restart: "no"
+
   backend:
     build:
       context: ./backtest
@@ -55,6 +75,8 @@ services:
     depends_on:
       mariadb:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
       jupyter:
         condition: service_healthy
     restart: unless-stopped

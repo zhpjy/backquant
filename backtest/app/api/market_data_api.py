@@ -2,15 +2,16 @@
 from flask import Blueprint, jsonify, request
 from pathlib import Path
 import os
+import re
 import sys
 from datetime import datetime
 
 from app.auth import auth_required
-from app.database import get_db_connection
+from app.database import get_db_connection, get_db_type
 from app.market_data.task_manager import get_task_manager
 from app.market_data.analyzer import analyze_bundle
 from app.market_data.tasks import do_incremental_update, do_full_download
-from app.market_data.utils import is_current_month_updated
+from app.market_data.utils import is_current_month_updated, get_market_data_db_path
 
 bp_market_data = Blueprint('market_data', __name__, url_prefix='/api/market-data')
 
@@ -18,6 +19,37 @@ bp_market_data = Blueprint('market_data', __name__, url_prefix='/api/market-data
 def _get_bundle_path():
     """Get bundle path."""
     return Path(os.environ.get('RQALPHA_BUNDLE_PATH', '/data/rqalpha/bundle'))
+
+
+def _ensure_market_data_schema():
+    """Ensure market data tables exist before serving requests.
+
+    App startup already tries to initialize the schema, but that path is wrapped
+    in a broad exception handler. Re-run the idempotent init here so first-time
+    requests do not fail on missing cache tables like vnpy_stats.
+    """
+    from app.market_data.db_init import init_database, init_database_with_connection
+
+    if get_db_type() == 'mariadb':
+        with get_db_connection('market_data') as db:
+            init_database_with_connection(db)
+    else:
+        db_path = get_market_data_db_path()
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        init_database(db_path)
+
+
+def _get_vnpy_table_name() -> str:
+    """Return the vnpy source table name within the configured database.
+
+    MariaDB connections already bind to DB_NAME, so vnpy source data, task
+    metadata, and stats cache should all live in that same database. Accept
+    only a simple table identifier here to avoid cross-schema drift.
+    """
+    table = (os.environ.get('DB_TABLE', 'dbbardata') or 'dbbardata').strip()
+    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', table):
+        raise ValueError('DB_TABLE must be a simple table name in the configured database')
+    return table
 
 
 @bp_market_data.route('/overview', methods=['GET'])
@@ -382,7 +414,10 @@ def _refresh_vnpy_stats_to_db(config_dict=None):
     """Query dbbardata live stats and save to vnpy_stats cache table."""
     import json
 
-    table = os.environ.get('DB_TABLE', 'dbbardata')
+    table = _get_vnpy_table_name()
+
+    if config_dict is None:
+        _ensure_market_data_schema()
 
     with get_db_connection(config_dict=config_dict) as db:
         lock_acquired = False
@@ -440,6 +475,7 @@ def get_vnpy_stats():
     """Get dbbardata table statistics from cache."""
     import json
     try:
+        _ensure_market_data_schema()
         with get_db_connection('market_data') as db:
             row = db.fetchone("SELECT * FROM vnpy_stats WHERE id = 1")
 

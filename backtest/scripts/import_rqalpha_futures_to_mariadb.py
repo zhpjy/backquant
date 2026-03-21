@@ -4,6 +4,7 @@
 import os
 import argparse
 import pickle
+import re
 import tempfile
 from pathlib import Path
 
@@ -163,6 +164,10 @@ def main():
     parser.add_argument("--pk", required=True, help="Path to instruments.pk")
     parser.add_argument("--table", default=os.getenv("DB_TABLE", "dbbardata"))
     args = parser.parse_args()
+    table = (args.table or "dbbardata").strip()
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table):
+        raise ValueError("DB_TABLE/--table must be a simple table name in DB_NAME")
+    args.table = table
 
     h5_path = Path(args.h5)
     pk_path = Path(args.pk)

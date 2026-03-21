@@ -2,6 +2,8 @@
 
 [English](README_EN.md) | 简体中文
 
+> 重要提示：示例网站已上线，请轻操：https://my.clawbot.help/
+
 <u>**完全本地化部署，策略和数据本地运行，不依赖第三方平台，既保障隐私安全，又具备高度可定制性。**</u>
 
 本仓库包含后端（Flask + RQAlpha）与前端（Vue 3）两部分，并提供 Research 工作台（Jupyter Lab）集成能力。

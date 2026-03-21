@@ -2,6 +2,8 @@
 
 English | [简体中文](README.md)
 
+> Important: The demo site is live. Please use it gently: https://my.clawbot.help/
+
 This repository includes a backend (Flask + RQAlpha) and a frontend (Vue 3), plus an integrated Research workspace (Jupyter Lab).
 **Docker is the recommended deployment** so you can pull the image and run it directly with Flask, Jupyter, Nginx, and the built frontend.
 

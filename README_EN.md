@@ -3,6 +3,7 @@
 English | [简体中文](README.md)
 
 > Important: The demo site is live. Please use it gently: https://my.clawbot.help/
+> Default username/password: `admin` / `pass123456`
 
 <u>**Fully self-hosted: strategies and data run locally without relying on any third-party platform, which protects privacy and allows deep customization.**</u>
 

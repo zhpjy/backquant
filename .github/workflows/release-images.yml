@@ -1,0 +1,131 @@
+name: Release Images
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Image tag to publish
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve release plan
+        env:
+          DISPATCH_TAG: ${{ github.event.inputs.image_tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            IMAGE_TAG="${DISPATCH_TAG}"
+            PUBLISH_LATEST="false"
+          else
+            IMAGE_TAG="${REF_NAME}"
+            PUBLISH_LATEST="true"
+          fi
+
+          if [[ -z "${IMAGE_TAG//[[:space:]]/}" ]]; then
+            echo "::error::resolved image_tag must not be empty or whitespace"
+            exit 1
+          fi
+          if [[ ! "${IMAGE_TAG}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "::error::resolved image_tag '${IMAGE_TAG}' is not a valid Docker tag"
+            exit 1
+          fi
+
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" && "${IMAGE_TAG}" == v* ]]; then
+            if ! git ls-remote --exit-code --tags origin "refs/tags/${IMAGE_TAG}" >/dev/null; then
+              echo "::error::workflow_dispatch image_tag '${IMAGE_TAG}' looks like a release tag, but no matching git tag exists"
+              exit 1
+            fi
+
+            if ! git rev-parse -q --verify "refs/tags/${IMAGE_TAG}" >/dev/null; then
+              git fetch --depth=1 origin "refs/tags/${IMAGE_TAG}:refs/tags/${IMAGE_TAG}"
+            fi
+
+            git checkout --detach "refs/tags/${IMAGE_TAG}"
+          fi
+
+          build_tags() {
+            local image="$1"
+            echo "${image}:${IMAGE_TAG}"
+            if [[ "${PUBLISH_LATEST}" == "true" ]]; then
+              echo "${image}:latest"
+            fi
+          }
+
+          {
+            echo "IMAGE_TAG=${IMAGE_TAG}"
+            echo "PUBLISH_LATEST=${PUBLISH_LATEST}"
+            echo "BACKEND_TAGS<<EOF"
+            build_tags "ghcr.io/zhpjy/backquant-backend"
+            echo "EOF"
+            echo "JUPYTER_TAGS<<EOF"
+            build_tags "ghcr.io/zhpjy/backquant-jupyter"
+            echo "EOF"
+            echo "FRONTEND_TAGS<<EOF"
+            build_tags "ghcr.io/zhpjy/backquant-frontend"
+            echo "EOF"
+          } >> "${GITHUB_ENV}"
+
+          echo "Resolved release plan:"
+          echo "  image_tag=${IMAGE_TAG}"
+          echo "  publish_latest=${PUBLISH_LATEST}"
+          echo "  backend tags:"
+          build_tags "ghcr.io/zhpjy/backquant-backend" | sed 's/^/    - /'
+          echo "  jupyter tags:"
+          build_tags "ghcr.io/zhpjy/backquant-jupyter" | sed 's/^/    - /'
+          echo "  frontend tags:"
+          build_tags "ghcr.io/zhpjy/backquant-frontend" | sed 's/^/    - /'
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backtest
+          file: ./backtest/Dockerfile
+          push: true
+          tags: ${{ env.BACKEND_TAGS }}
+
+      - name: Build and push jupyter
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backtest
+          file: ./backtest/Dockerfile
+          push: true
+          tags: ${{ env.JUPYTER_TAGS }}
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          build-args: |
+            VUE_APP_API_BASE=
+            VUE_APP_API_SERVER=
+          tags: ${{ env.FRONTEND_TAGS }}

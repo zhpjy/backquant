@@ -58,19 +58,6 @@ jobs:
             exit 1
           fi
 
-          if [[ "${EVENT_NAME}" == "workflow_dispatch" && "${IMAGE_TAG}" == v* ]]; then
-            if ! git ls-remote --exit-code --tags origin "refs/tags/${IMAGE_TAG}" >/dev/null; then
-              echo "::error::workflow_dispatch image_tag '${IMAGE_TAG}' looks like a release tag, but no matching git tag exists"
-              exit 1
-            fi
-
-            if ! git rev-parse -q --verify "refs/tags/${IMAGE_TAG}" >/dev/null; then
-              git fetch --depth=1 origin "refs/tags/${IMAGE_TAG}:refs/tags/${IMAGE_TAG}"
-            fi
-
-            git checkout --detach "refs/tags/${IMAGE_TAG}"
-          fi
-
           build_tags() {
             local image="$1"
             echo "${image}:${IMAGE_TAG}"

@@ -14,7 +14,10 @@ class JobCache:
         if not self.cache_path.exists():
             return {"jobs": {}}
 
-        payload = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        try:
+            payload = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {"jobs": {}}
         if not isinstance(payload, dict):
             return {"jobs": {}}
         if "jobs" not in payload or not isinstance(payload["jobs"], dict):

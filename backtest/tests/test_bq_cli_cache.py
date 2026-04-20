@@ -166,3 +166,14 @@ class JobCacheTestCase(unittest.TestCase):
             payload = cache._load()
 
         self.assertEqual(payload, {"jobs": {}})
+
+    def test_load_normalizes_invalid_json_payload(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_path = Path(tmpdir) / ".bq" / "jobs.json"
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text("{", encoding="utf-8")
+            cache = JobCache(cache_path)
+
+            payload = cache._load()
+
+        self.assertEqual(payload, {"jobs": {}})

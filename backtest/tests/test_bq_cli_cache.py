@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.cli.config import CliSettings
+from app.cli.cache import JobCache
 from app.cli.errors import CliError, EXIT_ARGUMENT, EXIT_LOCAL
 from app.cli.main import main
 from app.cli.output import json_error, json_ok
@@ -105,3 +106,20 @@ class BqCliFoundationTestCase(unittest.TestCase):
                 },
             },
         )
+
+
+class JobCacheTestCase(unittest.TestCase):
+    def test_record_run_creates_jobs_json(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = JobCache(Path(tmpdir) / ".bq" / "jobs.json")
+            cache.record_run("job_demo", Path("/tmp/demo.py"), "demo")
+
+            payload = json.loads((Path(tmpdir) / ".bq" / "jobs.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["jobs"]["job_demo"]["file"], "/tmp/demo.py")
+        self.assertEqual(payload["jobs"]["job_demo"]["strategy_id"], "demo")
+
+    def test_lookup_returns_none_when_job_not_cached(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = JobCache(Path(tmpdir) / ".bq" / "jobs.json")
+            self.assertIsNone(cache.lookup("job_missing"))

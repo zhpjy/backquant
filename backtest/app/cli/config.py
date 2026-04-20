@@ -25,7 +25,7 @@ class CliSettings:
             timeout_seconds = 10
 
         return cls(
-            base_url=source.get("BQ_BASE_URL", "").strip(),
+            base_url=source.get("BQ_BASE_URL", "").strip().rstrip("/"),
             username=source.get("BQ_USERNAME", ""),
             password=source.get("BQ_PASSWORD", ""),
             token=source.get("BQ_TOKEN", ""),

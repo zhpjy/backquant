@@ -2,10 +2,13 @@ import json
 import os
 import tempfile
 import unittest
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
 from app.cli.config import CliSettings
+from app.cli.errors import CliError, EXIT_ARGUMENT, EXIT_LOCAL
+from app.cli.main import main
 from app.cli.output import json_error, json_ok
 
 
@@ -43,7 +46,7 @@ class BqCliFoundationTestCase(unittest.TestCase):
     def test_settings_accepts_token_without_username_password(self):
         settings = CliSettings.from_env(
             {
-                "BQ_BASE_URL": "http://127.0.0.1:8088",
+                "BQ_BASE_URL": "  http://127.0.0.1:8088/  ",
                 "BQ_TOKEN": "token-123",
             }
         )
@@ -61,4 +64,44 @@ class BqCliFoundationTestCase(unittest.TestCase):
         self.assertEqual(
             json.loads(error_text),
             {"ok": False, "error": {"code": "LOCAL_FILE_ERROR", "message": "cannot read file"}},
+        )
+
+    def test_main_returns_click_exception_as_argument_error_json(self):
+        with patch("sys.stdout", new_callable=StringIO) as stdout:
+            exit_code = main(["unknown-command"])
+
+        self.assertEqual(exit_code, EXIT_ARGUMENT)
+        self.assertEqual(
+            json.loads(stdout.getvalue().strip()),
+            {
+                "ok": False,
+                "error": {
+                    "code": "CLI_ARGUMENT_ERROR",
+                    "message": "No such command 'unknown-command'.",
+                },
+            },
+        )
+
+    def test_main_returns_clierror_payload_and_exit_code(self):
+        error = CliError(
+            code="LOCAL_FILE_ERROR",
+            message="cannot read cache",
+            exit_code=EXIT_LOCAL,
+            details={"path": "/tmp/jobs.json"},
+        )
+        with patch("app.cli.main.cli.main", side_effect=error):
+            with patch("sys.stdout", new_callable=StringIO) as stdout:
+                exit_code = main([])
+
+        self.assertEqual(exit_code, EXIT_LOCAL)
+        self.assertEqual(
+            json.loads(stdout.getvalue().strip()),
+            {
+                "ok": False,
+                "error": {
+                    "code": "LOCAL_FILE_ERROR",
+                    "message": "cannot read cache",
+                    "details": {"path": "/tmp/jobs.json"},
+                },
+            },
         )

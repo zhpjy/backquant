@@ -23,6 +23,15 @@ class BackQuantClient:
     def _url(self, path: str) -> str:
         return f"{self.settings.base_url}{path}"
 
+    @staticmethod
+    def _raise_transport_error(exc: requests.RequestException) -> None:
+        raise CliError(
+            code="REMOTE_TRANSPORT_ERROR",
+            message=str(exc) or "remote transport error",
+            exit_code=EXIT_REMOTE,
+            details={"exception": type(exc).__name__, "error": str(exc)},
+        ) from exc
+
     def _decode_response(self, response: requests.Response) -> Any:
         try:
             payload = response.json()
@@ -56,17 +65,26 @@ class BackQuantClient:
                 exit_code=EXIT_ARGUMENT,
             )
 
-        response = self.session.post(
-            self._url("/api/login"),
-            json={"mobile": self.settings.username, "password": self.settings.password},
-            timeout=self.settings.timeout_seconds,
-        )
+        try:
+            response = self.session.post(
+                self._url("/api/login"),
+                json={"mobile": self.settings.username, "password": self.settings.password},
+                timeout=self.settings.timeout_seconds,
+            )
+        except requests.RequestException as exc:
+            self._raise_transport_error(exc)
         payload = self._decode_response(response)
         token = payload.get("token")
         if not token:
+            code = payload.get("code")
+            message = payload.get("message")
+            error = payload.get("error")
+            if isinstance(error, dict):
+                code = code or error.get("code")
+                message = message or error.get("message")
             raise CliError(
-                code="REMOTE_HTTP_ERROR",
-                message="remote login succeeded but token is missing",
+                code=str(code or "REMOTE_HTTP_ERROR"),
+                message=str(message or "remote login succeeded but token is missing"),
                 exit_code=EXIT_REMOTE,
                 details=payload,
             )
@@ -74,20 +92,26 @@ class BackQuantClient:
 
     def _post(self, path: str, *, json: dict) -> Any:
         self._ensure_auth()
-        response = self.session.post(
-            self._url(path),
-            json=json,
-            timeout=self.settings.timeout_seconds,
-        )
+        try:
+            response = self.session.post(
+                self._url(path),
+                json=json,
+                timeout=self.settings.timeout_seconds,
+            )
+        except requests.RequestException as exc:
+            self._raise_transport_error(exc)
         return self._decode_response(response)
 
     def _get(self, path: str, *, params: dict | None = None) -> Any:
         self._ensure_auth()
-        response = self.session.get(
-            self._url(path),
-            params=params,
-            timeout=self.settings.timeout_seconds,
-        )
+        try:
+            response = self.session.get(
+                self._url(path),
+                params=params,
+                timeout=self.settings.timeout_seconds,
+            )
+        except requests.RequestException as exc:
+            self._raise_transport_error(exc)
         return self._decode_response(response)
 
     @staticmethod
@@ -133,6 +157,12 @@ class BackQuantClient:
         return self._get(f"/api/backtest/jobs/{self._quote(job_id)}/result")
 
     def get_job_log(self, job_id: str, *, offset: int | None = None, tail: int | None = None) -> dict:
+        if offset is not None and tail is not None:
+            raise CliError(
+                code="CLI_ARGUMENT_ERROR",
+                message="offset and tail cannot be used together",
+                exit_code=EXIT_ARGUMENT,
+            )
         params: dict[str, int] | None = None
         if offset is not None:
             params = {"offset": offset}

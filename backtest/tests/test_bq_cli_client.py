@@ -1,9 +1,11 @@
 import unittest
 from unittest.mock import Mock, patch
 
+import requests
+
 from app.cli.client import BackQuantClient
 from app.cli.config import CliSettings
-from app.cli.errors import CliError, EXIT_REMOTE
+from app.cli.errors import CliError, EXIT_ARGUMENT, EXIT_REMOTE
 
 
 class BackQuantClientTestCase(unittest.TestCase):
@@ -289,3 +291,89 @@ class BackQuantClientTestCase(unittest.TestCase):
 
         payload = client._decode_response(response)
         self.assertEqual(payload, [{"job_id": "job-1"}])
+
+    @patch("app.cli.client.requests.Session")
+    def test_post_transport_failure_is_wrapped_as_cli_error(self, session_cls):
+        session = Mock()
+        session_cls.return_value = session
+        session.headers = {}
+        session.post.side_effect = requests.exceptions.Timeout("connect timeout")
+
+        settings = CliSettings(
+            base_url="http://127.0.0.1:8088",
+            username="",
+            password="",
+            token="jwt-token",
+            timeout_seconds=10,
+            jobs_cache_path=None,
+        )
+        client = BackQuantClient(settings)
+
+        with self.assertRaises(CliError) as ctx:
+            client.save_strategy("demo", "print(1)\n")
+
+        self.assertEqual(ctx.exception.code, "REMOTE_TRANSPORT_ERROR")
+        self.assertEqual(ctx.exception.exit_code, EXIT_REMOTE)
+
+    @patch("app.cli.client.requests.Session")
+    def test_get_transport_failure_is_wrapped_as_cli_error(self, session_cls):
+        session = Mock()
+        session_cls.return_value = session
+        session.headers = {}
+        session.get.side_effect = requests.exceptions.ConnectionError("connection refused")
+
+        settings = CliSettings(
+            base_url="http://127.0.0.1:8088",
+            username="",
+            password="",
+            token="jwt-token",
+            timeout_seconds=10,
+            jobs_cache_path=None,
+        )
+        client = BackQuantClient(settings)
+
+        with self.assertRaises(CliError) as ctx:
+            client.get_job("job_demo")
+
+        self.assertEqual(ctx.exception.code, "REMOTE_TRANSPORT_ERROR")
+        self.assertEqual(ctx.exception.exit_code, EXIT_REMOTE)
+
+    @patch("app.cli.client.requests.Session")
+    def test_login_200_without_token_preserves_payload_code_and_message(self, session_cls):
+        session = Mock()
+        session_cls.return_value = session
+        session.headers = {}
+        login_response = Mock()
+        login_response.status_code = 200
+        login_response.json.return_value = {"code": "BUNDLE_NOT_READY", "message": "bundle is downloading"}
+        session.post.return_value = login_response
+
+        client = BackQuantClient(self._settings())
+
+        with self.assertRaises(CliError) as ctx:
+            client.compile_strategy("demo", "print(1)\n")
+
+        self.assertEqual(ctx.exception.code, "BUNDLE_NOT_READY")
+        self.assertEqual(ctx.exception.message, "bundle is downloading")
+        self.assertEqual(ctx.exception.exit_code, EXIT_REMOTE)
+
+    @patch("app.cli.client.requests.Session")
+    def test_get_job_log_rejects_offset_and_tail_together(self, session_cls):
+        session = Mock()
+        session_cls.return_value = session
+        session.headers = {}
+        settings = CliSettings(
+            base_url="http://127.0.0.1:8088",
+            username="",
+            password="",
+            token="jwt-token",
+            timeout_seconds=10,
+            jobs_cache_path=None,
+        )
+        client = BackQuantClient(settings)
+
+        with self.assertRaises(CliError) as ctx:
+            client.get_job_log("job_demo", offset=1, tail=10)
+
+        self.assertEqual(ctx.exception.code, "CLI_ARGUMENT_ERROR")
+        self.assertEqual(ctx.exception.exit_code, EXIT_ARGUMENT)

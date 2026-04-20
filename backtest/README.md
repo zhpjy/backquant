@@ -1,5 +1,40 @@
 # BackQuant Backend
 
+## `bq` CLI（首版）
+
+`bq` 用于“本地策略文件 + 远端 BackQuant API”的工作流：在本地维护策略文件，通过 CLI 调用服务端接口完成编译、运行和任务查询。
+
+### 环境变量
+
+- `BQ_BASE_URL`：BackQuant API 根地址（例如 `http://127.0.0.1:54321`）
+- `BQ_USERNAME`：登录用户名（通常是手机号）
+- `BQ_PASSWORD`：登录密码
+- `BQ_TOKEN`：可选，直接使用已存在 token（设置后可跳过用户名/密码登录）
+- `BQ_TIMEOUT_SECONDS`：可选，HTTP 请求超时秒数
+
+### 示例命令
+
+```bash
+# 编译本地策略文件（远端编译检查）
+./bq strategy compile demo ./strategies/demo.py
+
+# 运行本地策略文件（提交回测任务）
+./bq strategy run demo ./strategies/demo.py --start-date 2020-01-01 --end-date 2020-12-31
+
+# 查看任务状态
+./bq job show <job_id>
+
+# 查看任务结果（支持分页）
+./bq job result <job_id> --page 1 --page-size 100
+
+# 查看任务日志（支持 offset / tail）
+./bq job log <job_id> --tail 4096
+```
+
+### 本地缓存
+
+`./.bq/jobs.json` 会保存 `job_id -> 本地策略文件路径` 的映射，供 `job` 相关命令在本地回溯任务来源。
+
 ## WSGI 环境变量
 
 建议使用项目根目录的 `.env.wsgi` 管理 WSGI 运行变量，不依赖 `~/.bashrc`。

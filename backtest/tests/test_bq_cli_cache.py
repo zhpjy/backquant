@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.cli.config import CliSettings
 from app.cli.output import json_error, json_ok
@@ -15,12 +16,29 @@ class BqCliFoundationTestCase(unittest.TestCase):
             old_cwd = Path.cwd()
             os.chdir(cwd)
             try:
-                settings = CliSettings.from_env({})
+                with patch.dict(os.environ, {}, clear=True):
+                    settings = CliSettings.from_env()
             finally:
                 os.chdir(old_cwd)
 
         self.assertEqual(settings.jobs_cache_path, cwd / ".bq" / "jobs.json")
         self.assertEqual(settings.timeout_seconds, 10)
+
+    def test_settings_from_env_uses_process_environment_by_default(self):
+        with patch.dict(
+            os.environ,
+            {
+                "BQ_BASE_URL": "http://127.0.0.1:8088",
+                "BQ_TOKEN": "token-from-env",
+                "BQ_TIMEOUT_SECONDS": "21",
+            },
+            clear=True,
+        ):
+            settings = CliSettings.from_env()
+
+        self.assertEqual(settings.base_url, "http://127.0.0.1:8088")
+        self.assertEqual(settings.token, "token-from-env")
+        self.assertEqual(settings.timeout_seconds, 21)
 
     def test_settings_accepts_token_without_username_password(self):
         settings = CliSettings.from_env(

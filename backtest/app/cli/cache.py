@@ -34,4 +34,7 @@ class JobCache:
 
     def lookup(self, job_id: str) -> dict[str, Any] | None:
         payload = self._load()
-        return payload["jobs"].get(job_id)
+        entry = payload["jobs"].get(job_id)
+        if not isinstance(entry, dict):
+            return None
+        return entry

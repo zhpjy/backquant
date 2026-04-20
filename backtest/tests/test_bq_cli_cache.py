@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -123,3 +124,34 @@ class JobCacheTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             cache = JobCache(Path(tmpdir) / ".bq" / "jobs.json")
             self.assertIsNone(cache.lookup("job_missing"))
+
+    def test_record_run_persists_utc_iso_recorded_at(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = JobCache(Path(tmpdir) / ".bq" / "jobs.json")
+            cache.record_run("job_demo", Path("/tmp/demo.py"), "demo")
+            payload = json.loads((Path(tmpdir) / ".bq" / "jobs.json").read_text(encoding="utf-8"))
+
+        recorded_at = payload["jobs"]["job_demo"]["recorded_at"]
+        parsed = datetime.fromisoformat(recorded_at)
+        self.assertEqual(parsed.tzinfo, timezone.utc)
+
+    def test_lookup_returns_cached_entry_on_hit(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = JobCache(Path(tmpdir) / ".bq" / "jobs.json")
+            cache.record_run("job_demo", Path("/tmp/demo.py"), "demo")
+
+            entry = cache.lookup("job_demo")
+
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["file"], "/tmp/demo.py")
+        self.assertEqual(entry["strategy_id"], "demo")
+        self.assertIn("recorded_at", entry)
+
+    def test_lookup_returns_none_for_malformed_non_dict_entry(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_path = Path(tmpdir) / ".bq" / "jobs.json"
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(json.dumps({"jobs": {"job_demo": "invalid"}}), encoding="utf-8")
+            cache = JobCache(cache_path)
+
+            self.assertIsNone(cache.lookup("job_demo"))

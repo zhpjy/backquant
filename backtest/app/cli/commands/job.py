@@ -7,7 +7,7 @@ import click
 from ..cache import JobCache
 from ..client import BackQuantClient
 from ..config import CliSettings
-from ..errors import CliError
+from ..errors import CliError, EXIT_LOCAL
 from ..output import json_error, json_ok
 
 
@@ -20,7 +20,15 @@ def _run_with_json_error(handler: Any) -> None:
 
 
 def _cached_entry(cache: JobCache, job_id: str) -> tuple[str | None, str | None]:
-    entry = cache.lookup(job_id)
+    try:
+        entry = cache.lookup(job_id)
+    except OSError as exc:
+        raise CliError(
+            code="LOCAL_FILE_ERROR",
+            message="cannot read local job cache",
+            exit_code=EXIT_LOCAL,
+            details={"job_id": job_id, "error": str(exc)},
+        ) from exc
     if not isinstance(entry, dict):
         return None, None
     file_path = entry.get("file")

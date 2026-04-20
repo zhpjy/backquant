@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 from click.testing import CliRunner
 
+from app.cli.errors import EXIT_LOCAL
 from app.cli.main import cli
 
 
@@ -68,3 +69,21 @@ class BqJobCommandTestCase(unittest.TestCase):
         self.assertEqual(payload["data"]["file"], "/tmp/bar.py")
         self.assertEqual(payload["data"]["strategy_id"], "bar")
         self.assertEqual(payload["data"]["remote"]["lines"], ["a", "b"])
+
+    @patch("app.cli.commands.job.JobCache")
+    @patch("app.cli.commands.job.BackQuantClient")
+    def test_job_show_returns_local_file_error_when_cache_lookup_permission_denied(self, client_cls, cache_cls):
+        client = Mock()
+        client_cls.return_value = client
+
+        cache = Mock()
+        cache.lookup.side_effect = PermissionError("permission denied")
+        cache_cls.return_value = cache
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["job", "show", "--job-id", "job_demo"])
+
+        self.assertEqual(result.exit_code, EXIT_LOCAL)
+        payload = json.loads(result.output)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["code"], "LOCAL_FILE_ERROR")

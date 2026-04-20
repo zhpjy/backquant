@@ -155,3 +155,14 @@ class JobCacheTestCase(unittest.TestCase):
             cache = JobCache(cache_path)
 
             self.assertIsNone(cache.lookup("job_demo"))
+
+    def test_load_normalizes_non_dict_top_level_payload(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_path = Path(tmpdir) / ".bq" / "jobs.json"
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(json.dumps([]), encoding="utf-8")
+            cache = JobCache(cache_path)
+
+            payload = cache._load()
+
+        self.assertEqual(payload, {"jobs": {}})

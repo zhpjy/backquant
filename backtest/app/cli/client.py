@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import MutableMapping
+from typing import Any
 from urllib.parse import quote
 
 import requests
@@ -22,7 +23,7 @@ class BackQuantClient:
     def _url(self, path: str) -> str:
         return f"{self.settings.base_url}{path}"
 
-    def _decode_response(self, response: requests.Response) -> dict:
+    def _decode_response(self, response: requests.Response) -> Any:
         try:
             payload = response.json()
         except ValueError:
@@ -37,7 +38,7 @@ class BackQuantClient:
                 message = str(error.get("message") or message)
             raise CliError(code=code, message=message, exit_code=EXIT_REMOTE, details=payload)
 
-        return payload if isinstance(payload, dict) else {"data": payload}
+        return payload
 
     def _ensure_auth(self) -> None:
         auth_header = self.session.headers.get("Authorization")
@@ -71,7 +72,7 @@ class BackQuantClient:
             )
         self.session.headers["Authorization"] = str(token)
 
-    def _post(self, path: str, *, json: dict) -> dict:
+    def _post(self, path: str, *, json: dict) -> Any:
         self._ensure_auth()
         response = self.session.post(
             self._url(path),
@@ -80,7 +81,7 @@ class BackQuantClient:
         )
         return self._decode_response(response)
 
-    def _get(self, path: str, *, params: dict | None = None) -> dict:
+    def _get(self, path: str, *, params: dict | None = None) -> Any:
         self._ensure_auth()
         response = self.session.get(
             self._url(path),

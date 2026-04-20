@@ -1,128 +1,128 @@
-# BackQuant AI CLI Design
+# BackQuant AI CLI 设计
 
-Date: 2026-04-20
-Status: Draft for review
+日期：2026-04-20
+状态：待评审草案
 
-## Goal
+## 目标
 
-Design a first-version CLI for AI-assisted RQAlpha strategy development and debugging.
+设计第一版用于 AI 辅助 RQAlpha 策略开发与调试的 CLI。
 
-The CLI is AI-first, JSON-first, and intended to let an AI agent iterate on local strategy files while using the existing remote BackQuant service for compilation, execution, logs, and results.
+这个 CLI 面向 AI 调用，默认输出 JSON，目标是让 AI 围绕本地策略文件持续迭代，同时复用现有远端 BackQuant 服务提供的编译、执行、日志和结果能力。
 
-## Scope
+## 范围
 
-This design only covers the first CLI version for:
+本设计第一版只覆盖：
 
-- RQAlpha strategy development and debugging
-- Local Python strategy files as the source of truth
-- Remote execution through the existing BackQuant HTTP API
-- Minimal local state for job-to-file mapping
+- RQAlpha 策略开发与调试
+- 本地 Python 策略文件作为权威源码
+- 通过现有 BackQuant HTTP API 进行远端执行
+- 用最小本地状态维护 `job_id -> 文件` 的映射
 
-This design does not cover:
+本设计不覆盖：
 
-- Factor research workflows
-- Notebook-driven AI workflows
-- VnPy CTA workflows
-- Multi-user conflict management
-- Remote API changes
-- Rich local project metadata or experiment tracking
+- 因子研究工作流
+- Notebook 驱动的 AI 工作流
+- VnPy CTA 工作流
+- 多用户冲突管理
+- 远端 API 改动
+- 丰富的本地项目元数据或实验追踪
 
-## Requirements
+## 约束与要求
 
-- AI is the primary caller.
-- The CLI should work as a local proxy tool.
-- Remote BackQuant logic should remain unchanged.
-- Strategy execution should use the existing remote flow:
-  1. save strategy
-  2. run strategy by `strategy_id`
-  3. inspect job state, result, and log
-- The local file is the development source of truth.
-- The remote strategy is only an execution mirror of the local file.
-- Command output defaults to JSON.
-- The CLI should keep local state as simple as possible.
+- AI 是第一调用者。
+- CLI 采用本地代理式工具模型。
+- 远端 BackQuant 逻辑保持不变。
+- 策略执行沿用现有远端流程：
+  1. 保存策略
+  2. 按 `strategy_id` 运行
+  3. 查看任务状态、结果和日志
+- 本地文件是开发主副本。
+- 远端策略只是本地文件的执行镜像。
+- 命令默认输出 JSON。
+- CLI 的本地状态尽量简单。
 
-## Approaches Considered
+## 备选方案
 
-### Approach A: Thin Remote API Wrapper
+### 方案 A：远端 API 的薄封装 CLI
 
-Expose the existing BackQuant HTTP API almost directly as CLI commands.
+几乎直接把 BackQuant HTTP API 暴露为 CLI 命令。
 
-Pros:
+优点：
 
-- Fastest to build
-- Minimal CLI behavior
+- 实现最快
+- CLI 行为最少
 
-Cons:
+缺点：
 
-- Weak local-file workflow
-- Poor AI ergonomics for strategy-file iteration
-- No local job-to-file linkage
+- 本地文件工作流弱
+- 不利于 AI 围绕策略文件持续迭代
+- 没有本地 `job -> 文件` 关联
 
-### Approach B: Local-Only CLI
+### 方案 B：纯本地 CLI
 
-Run everything locally from strategy files without using the remote BackQuant job system.
+完全围绕本地策略文件执行，不接入远端 BackQuant 任务体系。
 
-Pros:
+优点：
 
-- Simple runtime model
-- No remote coordination
+- 运行模型简单
+- 不需要远端协同
 
-Cons:
+缺点：
 
-- Breaks alignment with the existing BackQuant runtime
-- Loses remote job history, logs, and results
-- Conflicts with the preferred deployment model where AI and BackQuant may be separated
+- 与现有 BackQuant 运行方式脱节
+- 丢失远端 job 历史、日志和结果
+- 不符合 AI 与 BackQuant 分离部署的预期
 
-### Approach C: Local Proxy CLI Using Existing Remote APIs
+### 方案 C：复用现有远端 API 的本地代理式 CLI
 
-The CLI works on local files, but uses the existing remote save/run/job APIs without changing remote logic.
+CLI 面向本地文件工作，但执行时调用现有远端 save/run/job API，不修改远端逻辑。
 
-Pros:
+优点：
 
-- Best fit for AI-driven file iteration
-- Reuses current remote behavior
-- Keeps job/result/log flow unchanged
-- Minimal remote-side risk
+- 最符合 AI 围绕本地文件调试的目标
+- 复用现有远端行为
+- job/result/log 流程不变
+- 远端改动风险最低
 
-Cons:
+缺点：
 
-- Requires a small amount of local state
-- Remote strategy IDs are derived from local file naming
+- 需要一层很薄的本地状态
+- 远端 `strategy_id` 依赖本地文件命名规则
 
-### Recommendation
+### 推荐方案
 
-Choose Approach C.
+选择方案 C。
 
-It gives the AI a local-file-centered workflow while preserving the current BackQuant remote behavior and avoiding backend changes.
+它能让 AI 以本地文件为中心工作，同时保留现有 BackQuant 远端行为，并避免后端改造。
 
-## Core Model
+## 核心模型
 
-### Source of truth
+### 权威源码
 
-- Local `.py` file is the authoritative strategy source.
-- Remote strategy code is overwritten from the local file before each run.
+- 本地 `.py` 文件是唯一权威策略源码。
+- 每次运行前，远端策略代码都由本地文件覆盖。
 
-### Remote strategy identity
+### 远端策略标识
 
-- `strategy_id` is derived from the local file stem.
-- Example: `foo.py -> foo`
+- `strategy_id` 由本地文件名去掉扩展名得到。
+- 例如：`foo.py -> foo`
 
-The first version accepts this simple convention and does not attempt to solve same-name collisions across different directories.
+第一版接受这个简单规则，不尝试解决不同目录下同名文件冲突。
 
-### Remote job identity
+### 远端任务标识
 
-- Jobs remain fully owned by the remote BackQuant system.
-- CLI receives `job_id` from the remote service and does not invent an alternative task model.
+- Job 完全由远端 BackQuant 系统管理。
+- CLI 从远端获得 `job_id`，不另外发明新的任务模型。
 
-### Local cache
+### 本地缓存
 
-The CLI stores a minimal local cache to map `job_id` back to the local file used when the job was launched.
+CLI 在本地维护一个极小缓存，用来记录某个 `job_id` 是从哪个本地文件提交的。
 
-Suggested file:
+建议文件：
 
 - `./.bq/jobs.json`
 
-Suggested structure:
+建议结构：
 
 ```json
 {
@@ -136,11 +136,11 @@ Suggested structure:
 }
 ```
 
-This cache is not authoritative. It is only a local convenience layer.
+这份缓存不是权威来源，只是本地方便查询的辅助层。
 
-## Command Model
+## 命令模型
 
-The first version exposes these commands:
+第一版 CLI 暴露这些命令：
 
 - `bq strategy compile --file PATH`
 - `bq strategy run --file PATH --start YYYY-MM-DD --end YYYY-MM-DD [--cash ...] [--benchmark ...] [--frequency ...]`
@@ -149,83 +149,83 @@ The first version exposes these commands:
 - `bq job result --job-id ID`
 - `bq job log --job-id ID`
 
-## Command Behavior
+## 命令行为
 
 ### `bq strategy compile --file PATH`
 
-Behavior:
+行为：
 
-1. Read the local file.
-2. Derive `strategy_id` from `PATH.stem`.
-3. Call the existing remote compile API using temporary code in the request body.
-4. Return JSON.
+1. 读取本地文件。
+2. 根据 `PATH.stem` 推导 `strategy_id`。
+3. 调用现有远端编译接口，并把本地代码作为临时代码放入请求体。
+4. 输出 JSON。
 
-Notes:
+说明：
 
-- This command does not overwrite the remote saved strategy.
-- This command is intended for syntax and dependency checks before run.
+- 这个命令不会覆盖远端已保存策略。
+- 这个命令用于在运行前做语法和依赖检查。
 
 ### `bq strategy run --file PATH ...`
 
-Behavior:
+行为：
 
-1. Read the local file.
-2. Derive `strategy_id` from `PATH.stem`.
-3. Call the existing remote save strategy API to overwrite the remote strategy with local code.
-4. Call the existing remote run API using that `strategy_id`.
-5. Receive `job_id`.
-6. Write `job_id -> file` into `./.bq/jobs.json`.
-7. Return JSON.
+1. 读取本地文件。
+2. 根据 `PATH.stem` 推导 `strategy_id`。
+3. 调用现有远端保存策略接口，用本地代码覆盖远端同名策略。
+4. 调用现有远端运行接口，以该 `strategy_id` 启动回测。
+5. 获得 `job_id`。
+6. 将 `job_id -> file` 写入 `./.bq/jobs.json`。
+7. 输出 JSON。
 
-Notes:
+说明：
 
-- This command is effectively `save -> run`.
-- No separate publish step exists in version 1.
-- The remote strategy is treated as the current executable mirror of the local file.
+- 这个命令本质上是 `save -> run`。
+- 第一版没有单独的 publish 步骤。
+- 远端策略被视为本地文件当前可执行镜像。
 
 ### `bq strategy pull --file PATH`
 
-Behavior:
+行为：
 
-1. Derive `strategy_id` from `PATH.stem`.
-2. Fetch the current remote strategy code.
-3. Overwrite the local file with the remote code.
-4. Return JSON.
+1. 根据 `PATH.stem` 推导 `strategy_id`。
+2. 拉取当前远端策略代码。
+3. 覆盖写入本地文件。
+4. 输出 JSON。
 
-Notes:
+说明：
 
-- This command is intended for synchronization or recovery.
-- In version 1, no merge behavior is provided.
+- 这个命令用于同步或恢复。
+- 第一版不提供 merge 行为。
 
 ### `bq job show --job-id ID`
 
-Behavior:
+行为：
 
-1. Query the existing remote job status endpoint.
-2. Look up local file mapping from `./.bq/jobs.json`.
-3. Return JSON containing the local file mapping and raw remote response.
+1. 查询现有远端任务状态接口。
+2. 从 `./.bq/jobs.json` 查找本地文件映射。
+3. 返回包含本地映射和远端原始响应的 JSON。
 
 ### `bq job result --job-id ID`
 
-Behavior:
+行为：
 
-1. Query the existing remote result endpoint.
-2. Look up local file mapping from `./.bq/jobs.json`.
-3. Return JSON containing the local file mapping and raw remote response.
+1. 查询现有远端结果接口。
+2. 从 `./.bq/jobs.json` 查找本地文件映射。
+3. 返回包含本地映射和远端原始响应的 JSON。
 
-The first version intentionally uses remote passthrough instead of CLI-side summarization.
+第一版故意保持远端透传，不在 CLI 侧做结果摘要。
 
 ### `bq job log --job-id ID`
 
-Behavior:
+行为：
 
-1. Query the existing remote log endpoint.
-2. Look up local file mapping from `./.bq/jobs.json`.
-3. Return JSON containing the local file mapping and raw remote response.
+1. 查询现有远端日志接口。
+2. 从 `./.bq/jobs.json` 查找本地文件映射。
+3. 返回包含本地映射和远端原始响应的 JSON。
 
-## JSON Contracts
+## JSON 契约
 
-### Run success
+### `run` 成功
 
 ```json
 {
@@ -239,7 +239,7 @@ Behavior:
 }
 ```
 
-### Run failure
+### `run` 失败
 
 ```json
 {
@@ -251,7 +251,7 @@ Behavior:
 }
 ```
 
-### Compile success
+### `compile` 成功
 
 ```json
 {
@@ -269,7 +269,7 @@ Behavior:
 }
 ```
 
-### Compile failure
+### `compile` 失败
 
 ```json
 {
@@ -295,7 +295,7 @@ Behavior:
 }
 ```
 
-### Job command success shape
+### `job` 命令成功返回形态
 
 ```json
 {
@@ -309,92 +309,92 @@ Behavior:
 }
 ```
 
-If the local cache does not contain the mapping, `file` should be `null`.
+如果本地缓存中没有对应映射，`file` 返回 `null`。
 
-## Error Handling
+## 错误处理
 
-Suggested CLI exit codes:
+建议退出码：
 
-- `0`: success
-- `2`: CLI argument error
-- `3`: local file or local cache error
-- `4`: remote request failure or remote business error
+- `0`：成功
+- `2`：CLI 参数错误
+- `3`：本地文件或本地缓存错误
+- `4`：远端请求失败或远端业务错误
 
-The CLI should always prefer structured JSON output over human-oriented text.
+CLI 应始终优先返回结构化 JSON，而不是面向人类的自由文本。
 
-## Data Flow
+## 数据流
 
-### Compile flow
+### 编译流程
 
-1. local file read
-2. derive `strategy_id`
-3. send temporary code to remote compile API
-4. return structured compile output
+1. 读取本地文件
+2. 推导 `strategy_id`
+3. 将临时代码提交到远端编译接口
+4. 返回结构化编译结果
 
-### Run flow
+### 运行流程
 
-1. local file read
-2. derive `strategy_id`
-3. overwrite remote strategy code
-4. request remote run
-5. receive `job_id`
-6. update local cache
-7. return structured run output
+1. 读取本地文件
+2. 推导 `strategy_id`
+3. 覆盖远端策略代码
+4. 请求远端运行
+5. 获得 `job_id`
+6. 更新本地缓存
+7. 返回结构化运行结果
 
-### Job flow
+### Job 查询流程
 
-1. query remote endpoint
-2. read local cache
-3. return local mapping plus remote payload
+1. 查询远端接口
+2. 读取本地缓存
+3. 返回本地映射和远端原始载荷
 
-## Testing Strategy
+## 测试策略
 
-Version 1 should be verified with:
+第一版应至少验证：
 
-- file stem to `strategy_id` derivation
-- local file read errors
-- local cache creation and update
-- remote compile passthrough
-- remote save then run flow
-- job mapping lookup
-- missing local cache entries
-- JSON output stability
+- 文件名到 `strategy_id` 的推导
+- 本地文件读取错误
+- 本地缓存创建和更新
+- 远端编译透传
+- 远端 save 后再 run 的流程
+- job 映射查询
+- 本地缓存缺失时的行为
+- JSON 输出稳定性
 
-The first version should prefer a small set of deterministic CLI tests over broad integration scope.
+第一版应优先做小而确定的 CLI 测试，而不是大范围集成测试。
 
-## Risks and Tradeoffs
+## 风险与取舍
 
-### Same-name file collisions
+### 同名文件冲突
 
-Two different files with the same stem map to the same remote `strategy_id`.
+两个不同文件如果文件名去扩展名后相同，就会映射到同一个远端 `strategy_id`。
 
-Version 1 accepts this tradeoff for simplicity.
+第一版接受这个取舍，以换取简单性。
 
-### Remote strategy overwrite semantics
+### 远端策略被覆盖
 
-Running a local file overwrites the remote strategy every time.
+每次运行本地文件都会覆盖远端同名策略。
 
-This is intentional in version 1 because the remote strategy acts as an execution mirror, not a separately curated artifact.
+这是第一版有意接受的行为，因为远端策略在此模型下是执行镜像，不是独立维护的正式产物。
 
-### Local cache incompleteness
+### 本地缓存不完整
 
-If `./.bq/jobs.json` is lost or incomplete, job queries still work remotely, but the CLI may not be able to report the originating local file.
+如果 `./.bq/jobs.json` 丢失或不完整，远端 job 查询仍然可用，但 CLI 可能无法报告该 job 对应的本地文件。
 
-This is acceptable because the cache is non-authoritative.
+这个风险可接受，因为缓存本来就不是权威来源。
 
-## Explicit Non-Goals
+## 明确不做的事情
 
-Version 1 does not include:
+第一版不包括：
 
-- factor evaluation commands
-- notebook orchestration
-- publish/promote workflow
-- remote strategy naming prefixes
-- directory-aware conflict handling
-- CLI-side result summarization
-- local experiment database
-- bidirectional sync conflict resolution
+- 因子评估命令
+- Notebook 编排
+- publish/promote 工作流
+- 远端策略名前缀
+- 基于目录的冲突处理
+- CLI 侧结果摘要
+- 本地实验数据库
+- 双向同步冲突处理
 
-## Next Step
+## 下一步
 
-After this design is reviewed and approved, the next artifact should be an implementation plan for the CLI package structure, API client layer, cache module, and command handlers.
+在这份设计被评审和确认之后，下一份产物应当是实现计划，明确 CLI 包结构、API client 层、本地缓存模块和命令处理器的拆分方式。

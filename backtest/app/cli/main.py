@@ -5,7 +5,7 @@ from typing import Sequence
 
 import click
 
-from .commands.strategy import register_strategy_commands
+from .commands import register_job_commands, register_strategy_commands
 from .config import CliSettings
 from .errors import CliError, EXIT_ARGUMENT, EXIT_OK
 from .output import json_error
@@ -19,6 +19,7 @@ def cli(ctx: click.Context) -> None:
 
 
 register_strategy_commands(cli)
+register_job_commands(cli)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

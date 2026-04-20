@@ -2,12 +2,12 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from click.testing import CliRunner
 
+from app.cli.errors import EXIT_LOCAL, EXIT_REMOTE
 from app.cli.main import cli
-from app.cli.errors import EXIT_REMOTE
 
 
 class BqStrategyCommandTestCase(unittest.TestCase):
@@ -46,6 +46,28 @@ class BqStrategyCommandTestCase(unittest.TestCase):
         self.assertEqual(payload["data"]["job_id"], "job_demo")
         self.assertEqual(payload["data"]["file"], str(strategy_path))
         self.assertEqual(payload["data"]["strategy_id"], "foo")
+        client.save_strategy.assert_called_once_with("foo", "def init(context):\n    pass\n")
+        client.run_strategy.assert_called_once_with(
+            strategy_id="foo",
+            start_date="2026-01-01",
+            end_date="2026-01-31",
+            cash=1000000.0,
+            benchmark="000300.XSHG",
+            frequency="1d",
+        )
+        self.assertLess(
+            client.mock_calls.index(call.save_strategy("foo", "def init(context):\n    pass\n")),
+            client.mock_calls.index(
+                call.run_strategy(
+                    strategy_id="foo",
+                    start_date="2026-01-01",
+                    end_date="2026-01-31",
+                    cash=1000000.0,
+                    benchmark="000300.XSHG",
+                    frequency="1d",
+                )
+            ),
+        )
         cache.record_run.assert_called_once_with("job_demo", strategy_path.resolve(), "foo")
 
     @patch("app.cli.commands.strategy.BackQuantClient")
@@ -95,6 +117,17 @@ class BqStrategyCommandTestCase(unittest.TestCase):
         self.assertEqual(payload["error"]["code"], "COMPILE_ERROR")
         self.assertEqual(payload["error"]["message"], "syntax error")
 
+    def test_compile_missing_local_file_returns_local_file_error(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            strategy_path = Path(tmpdir) / "missing.py"
+            runner = CliRunner()
+            result = runner.invoke(cli, ["strategy", "compile", "--file", str(strategy_path)])
+
+        self.assertEqual(result.exit_code, EXIT_LOCAL)
+        payload = json.loads(result.output)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["code"], "LOCAL_FILE_ERROR")
+
     @patch("app.cli.commands.strategy.BackQuantClient")
     def test_pull_overwrites_local_file_with_remote_code(self, client_cls):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -110,3 +143,6 @@ class BqStrategyCommandTestCase(unittest.TestCase):
 
             self.assertEqual(result.exit_code, 0)
             self.assertEqual(strategy_path.read_text(encoding="utf-8"), "print('new')\n")
+            payload = json.loads(result.output)
+            self.assertEqual(payload["data"]["file"], str(strategy_path))
+            self.assertEqual(payload["data"]["strategy_id"], "demo")

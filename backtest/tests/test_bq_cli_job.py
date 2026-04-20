@@ -46,6 +46,7 @@ class BqJobCommandTestCase(unittest.TestCase):
         payload = json.loads(result.output)
         self.assertIsNone(payload["data"]["file"])
         self.assertIsNone(payload["data"]["strategy_id"])
+        self.assertEqual(payload["data"]["remote"]["summary"]["total_returns"], 0.1)
 
     @patch("app.cli.commands.job.JobCache")
     @patch("app.cli.commands.job.BackQuantClient")

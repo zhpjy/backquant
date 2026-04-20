@@ -121,6 +121,154 @@ class BackQuantClientTestCase(unittest.TestCase):
         self.assertEqual(ctx.exception.details, {"error": {"code": "NOT_FOUND", "message": "strategy not found"}})
 
     @patch("app.cli.client.requests.Session")
+    def test_save_strategy_posts_expected_contract(self, session_cls):
+        session = Mock()
+        session_cls.return_value = session
+        session.headers = {}
+        save_response = Mock()
+        save_response.status_code = 200
+        save_response.json.return_value = {
+            "ok": True,
+            "data": {"id": "demo", "size": 17},
+        }
+        session.post.return_value = save_response
+
+        settings = CliSettings(
+            base_url="http://127.0.0.1:8088",
+            username="",
+            password="",
+            token="jwt-token",
+            timeout_seconds=10,
+            jobs_cache_path=None,
+        )
+        client = BackQuantClient(settings)
+
+        payload = client.save_strategy("demo", "def init(context):\n    pass\n")
+        self.assertTrue(payload["ok"])
+        self.assertEqual(session.headers["Authorization"], "jwt-token")
+        self.assertEqual(
+            session.post.call_args.args[0],
+            "http://127.0.0.1:8088/api/backtest/strategies/demo",
+        )
+        self.assertEqual(
+            session.post.call_args.kwargs["json"],
+            {"code": "def init(context):\n    pass\n"},
+        )
+
+    @patch("app.cli.client.requests.Session")
+    def test_get_strategy_success_calls_expected_endpoint(self, session_cls):
+        session = Mock()
+        session_cls.return_value = session
+        session.headers = {}
+        get_response = Mock()
+        get_response.status_code = 200
+        get_response.json.return_value = {"ok": True, "data": {"id": "demo", "code": "print(1)\n"}}
+        session.get.return_value = get_response
+
+        settings = CliSettings(
+            base_url="http://127.0.0.1:8088",
+            username="",
+            password="",
+            token="jwt-token",
+            timeout_seconds=10,
+            jobs_cache_path=None,
+        )
+        client = BackQuantClient(settings)
+
+        payload = client.get_strategy("demo")
+        self.assertEqual(payload["data"]["id"], "demo")
+        self.assertEqual(session.headers["Authorization"], "jwt-token")
+        self.assertEqual(
+            session.get.call_args.args[0],
+            "http://127.0.0.1:8088/api/backtest/strategies/demo",
+        )
+
+    @patch("app.cli.client.requests.Session")
+    def test_get_job_calls_expected_endpoint(self, session_cls):
+        session = Mock()
+        session_cls.return_value = session
+        session.headers = {}
+        get_response = Mock()
+        get_response.status_code = 200
+        get_response.json.return_value = {"job_id": "job_demo", "status": "RUNNING"}
+        session.get.return_value = get_response
+
+        settings = CliSettings(
+            base_url="http://127.0.0.1:8088",
+            username="",
+            password="",
+            token="jwt-token",
+            timeout_seconds=10,
+            jobs_cache_path=None,
+        )
+        client = BackQuantClient(settings)
+
+        payload = client.get_job("job_demo")
+        self.assertEqual(payload, {"job_id": "job_demo", "status": "RUNNING"})
+        self.assertEqual(session.headers["Authorization"], "jwt-token")
+        self.assertEqual(
+            session.get.call_args.args[0],
+            "http://127.0.0.1:8088/api/backtest/jobs/job_demo",
+        )
+
+    @patch("app.cli.client.requests.Session")
+    def test_get_job_result_calls_expected_endpoint(self, session_cls):
+        session = Mock()
+        session_cls.return_value = session
+        session.headers = {}
+        get_response = Mock()
+        get_response.status_code = 200
+        get_response.json.return_value = {"summary": {}, "equity": {}, "trades": []}
+        session.get.return_value = get_response
+
+        settings = CliSettings(
+            base_url="http://127.0.0.1:8088",
+            username="",
+            password="",
+            token="jwt-token",
+            timeout_seconds=10,
+            jobs_cache_path=None,
+        )
+        client = BackQuantClient(settings)
+
+        payload = client.get_job_result("job_demo")
+        self.assertEqual(payload, {"summary": {}, "equity": {}, "trades": []})
+        self.assertEqual(session.headers["Authorization"], "jwt-token")
+        self.assertEqual(
+            session.get.call_args.args[0],
+            "http://127.0.0.1:8088/api/backtest/jobs/job_demo/result",
+        )
+
+    @patch("app.cli.client.requests.Session")
+    def test_get_job_log_calls_expected_endpoint_with_offset(self, session_cls):
+        session = Mock()
+        session_cls.return_value = session
+        session.headers = {}
+        get_response = Mock()
+        get_response.status_code = 200
+        get_response.json.return_value = {"job_id": "job_demo", "content": "line\n", "offset": 5}
+        session.get.return_value = get_response
+
+        settings = CliSettings(
+            base_url="http://127.0.0.1:8088",
+            username="",
+            password="",
+            token="jwt-token",
+            timeout_seconds=10,
+            jobs_cache_path=None,
+        )
+        client = BackQuantClient(settings)
+
+        payload = client.get_job_log("job_demo", offset=5)
+        self.assertEqual(payload, {"job_id": "job_demo", "content": "line\n", "offset": 5})
+        self.assertEqual(session.headers["Authorization"], "jwt-token")
+        self.assertEqual(
+            session.get.call_args.args[0],
+            "http://127.0.0.1:8088/api/backtest/jobs/job_demo/log",
+        )
+        self.assertEqual(session.get.call_args.kwargs["params"], {"offset": 5})
+
+    @patch("app.cli.client.requests.Session")
     def test_decode_response_returns_non_dict_json_as_is_for_success(self, session_cls):
         session = Mock()
         session_cls.return_value = session

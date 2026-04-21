@@ -142,7 +142,10 @@ CLI 在本地维护一个极小缓存，用来记录某个 `job_id` 是从哪个
 
 第一版 CLI 暴露这些命令：
 
+- `bq strategy create --file PATH`
+- `bq strategy list [--q TEXT] [--limit N] [--offset N]`
 - `bq strategy compile --file PATH`
+- `bq strategy delete --strategy-id ID [--cascade]`
 - `bq strategy run --file PATH --start YYYY-MM-DD --end YYYY-MM-DD [--cash ...] [--benchmark ...] [--frequency ...]`
 - `bq strategy pull --file PATH`
 - `bq job show --job-id ID`
@@ -150,6 +153,34 @@ CLI 在本地维护一个极小缓存，用来记录某个 `job_id` 是从哪个
 - `bq job log --job-id ID`
 
 ## 命令行为
+
+### `bq strategy create --file PATH`
+
+行为：
+
+1. 根据 `PATH.stem` 推导 `strategy_id`。
+2. 若本地文件已存在，则报错。
+3. 在本地写入一份最小 RQAlpha 策略模板。
+4. 输出 JSON。
+
+说明：
+
+- 这个命令只初始化本地文件。
+- 这个命令不创建或修改远端策略。
+- 远端同名策略是否存在，不影响本地 create。
+
+### `bq strategy list`
+
+行为：
+
+1. 调用现有远端策略列表接口。
+2. 支持透传 `q`、`limit`、`offset`。
+3. 输出包含远端原始响应的 JSON。
+
+说明：
+
+- 这个命令用于查看远端当前有哪些策略。
+- 第一版不做本地文件和远端策略的对账。
 
 ### `bq strategy compile --file PATH`
 
@@ -196,6 +227,20 @@ CLI 在本地维护一个极小缓存，用来记录某个 `job_id` 是从哪个
 
 - 这个命令用于同步或恢复。
 - 第一版不提供 merge 行为。
+
+### `bq strategy delete --strategy-id ID [--cascade]`
+
+行为：
+
+1. 调用现有远端删除策略接口。
+2. 若指定 `--cascade`，则请求远端连带删除关联 job。
+3. 输出包含远端原始响应的 JSON。
+
+说明：
+
+- 这个命令只删除远端策略。
+- 第一版不会自动删除任何本地文件。
+- 如果远端策略仍被历史 job 引用且未使用 `--cascade`，CLI 直接返回远端错误。
 
 ### `bq job show --job-id ID`
 

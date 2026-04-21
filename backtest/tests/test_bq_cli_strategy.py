@@ -11,6 +11,60 @@ from app.cli.main import cli
 
 
 class BqStrategyCommandTestCase(unittest.TestCase):
+    def test_create_writes_minimal_rqalpha_template(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            strategy_path = Path(tmpdir) / "demo.py"
+            runner = CliRunner()
+
+            result = runner.invoke(cli, ["strategy", "create", "--file", str(strategy_path)])
+            self.assertEqual(result.exit_code, 0)
+            self.assertTrue(strategy_path.exists())
+            self.assertIn("def init(context):", strategy_path.read_text(encoding="utf-8"))
+            payload = json.loads(result.output)
+            self.assertEqual(payload["data"]["strategy_id"], "demo")
+            self.assertTrue(payload["data"]["created"])
+
+    def test_create_returns_local_file_error_when_file_exists(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            strategy_path = Path(tmpdir) / "demo.py"
+            strategy_path.write_text("print('exists')\n", encoding="utf-8")
+            runner = CliRunner()
+
+            result = runner.invoke(cli, ["strategy", "create", "--file", str(strategy_path)])
+
+        self.assertEqual(result.exit_code, EXIT_LOCAL)
+        payload = json.loads(result.output)
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["error"]["code"], "LOCAL_FILE_ERROR")
+
+    @patch("app.cli.commands.strategy.BackQuantClient")
+    def test_list_returns_remote_payload(self, client_cls):
+        client = Mock()
+        client.list_strategies.return_value = {"ok": True, "data": {"strategies": [{"id": "demo"}], "total": 1}}
+        client_cls.return_value = client
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["strategy", "list", "--q", "de", "--limit", "20", "--offset", "5"])
+
+        self.assertEqual(result.exit_code, 0)
+        payload = json.loads(result.output)
+        self.assertEqual(payload["data"]["remote"]["data"]["total"], 1)
+        client.list_strategies.assert_called_once_with(q="de", limit=20, offset=5)
+
+    @patch("app.cli.commands.strategy.BackQuantClient")
+    def test_delete_calls_remote_with_cascade(self, client_cls):
+        client = Mock()
+        client.delete_strategy.return_value = {"ok": True, "data": {"strategy_id": "demo", "deleted": True}}
+        client_cls.return_value = client
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["strategy", "delete", "--strategy-id", "demo", "--cascade"])
+
+        self.assertEqual(result.exit_code, 0)
+        payload = json.loads(result.output)
+        self.assertEqual(payload["data"]["remote"]["data"]["strategy_id"], "demo")
+        client.delete_strategy.assert_called_once_with("demo", cascade=True)
+
     @patch("app.cli.commands.strategy.JobCache")
     @patch("app.cli.commands.strategy.BackQuantClient")
     def test_run_saves_remote_strategy_runs_job_and_records_cache(self, client_cls, cache_cls):
@@ -69,6 +123,45 @@ class BqStrategyCommandTestCase(unittest.TestCase):
             ),
         )
         cache.record_run.assert_called_once_with("job_demo", strategy_path.resolve(), "foo")
+
+    @patch("app.cli.commands.strategy.JobCache")
+    @patch("app.cli.commands.strategy.BackQuantClient")
+    def test_run_returns_job_id_even_when_local_cache_write_fails(self, client_cls, cache_cls):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            strategy_path = Path(tmpdir) / "foo.py"
+            strategy_path.write_text("def init(context):\n    pass\n", encoding="utf-8")
+
+            client = Mock()
+            client.save_strategy.return_value = {"ok": True}
+            client.run_strategy.return_value = {"job_id": "job_demo"}
+            client_cls.return_value = client
+
+            cache = Mock()
+            cache.record_run.side_effect = PermissionError("permission denied")
+            cache_cls.return_value = cache
+
+            runner = CliRunner()
+            result = runner.invoke(
+                cli,
+                [
+                    "strategy",
+                    "run",
+                    "--file",
+                    str(strategy_path),
+                    "--start",
+                    "2026-01-01",
+                    "--end",
+                    "2026-01-31",
+                ],
+            )
+
+        self.assertEqual(result.exit_code, 0)
+        payload = json.loads(result.output)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["data"]["job_id"], "job_demo")
+        self.assertEqual(payload["data"]["strategy_id"], "foo")
+        self.assertEqual(payload["data"]["warning"]["code"], "LOCAL_CACHE_WRITE_ERROR")
+        self.assertEqual(payload["data"]["warning"]["details"]["job_id"], "job_demo")
 
     @patch("app.cli.commands.strategy.BackQuantClient")
     def test_compile_wraps_remote_payload(self, client_cls):

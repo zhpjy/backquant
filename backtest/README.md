@@ -15,25 +15,42 @@
 ### 示例命令
 
 ```bash
+# 初始化本地策略文件（只写本地，不推送远端）
+./bq strategy create --file ./strategies/demo.py
+
+# 查看远端策略列表
+./bq strategy list
+./bq strategy list --q demo --limit 20 --offset 0
+
 # 编译本地策略文件（远端编译检查）
-./bq strategy compile demo ./strategies/demo.py
+./bq strategy compile --file ./strategies/demo.py
 
 # 运行本地策略文件（提交回测任务）
-./bq strategy run demo ./strategies/demo.py --start-date 2020-01-01 --end-date 2020-12-31
+./bq strategy run --file ./strategies/demo.py --start 2020-01-01 --end 2020-12-31
+
+# 删除远端策略（不删除本地文件）
+./bq strategy delete --strategy-id demo
+./bq strategy delete --strategy-id demo --cascade
 
 # 查看任务状态
-./bq job show <job_id>
+./bq job show --job-id <job_id>
 
-# 查看任务结果（支持分页）
-./bq job result <job_id> --page 1 --page-size 100
+# 查看任务结果
+./bq job result --job-id <job_id>
 
-# 查看任务日志（支持 offset / tail）
-./bq job log <job_id> --tail 4096
+# 查看任务完整日志（`remote.raw` 为日志文本）
+./bq job log --job-id <job_id>
+
+# 查看任务日志切片（远端增量接口）
+./bq job log --job-id <job_id> --tail 4096
+./bq job log --job-id <job_id> --offset 4096
 ```
 
 ### 本地缓存
 
 `./.bq/jobs.json` 会保存 `job_id -> 本地策略文件路径` 的映射，供 `job` 相关命令在本地回溯任务来源。
+
+如果这个缓存文件缺失、损坏或写入失败，远端任务仍可正常执行和查询，但 CLI 可能无法补充对应的本地文件信息。
 
 ## WSGI 环境变量
 

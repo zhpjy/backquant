@@ -114,6 +114,18 @@ class BackQuantClient:
             self._raise_transport_error(exc)
         return self._decode_response(response)
 
+    def _delete(self, path: str, *, params: dict | None = None) -> Any:
+        self._ensure_auth()
+        try:
+            response = self.session.delete(
+                self._url(path),
+                params=params,
+                timeout=self.settings.timeout_seconds,
+            )
+        except requests.RequestException as exc:
+            self._raise_transport_error(exc)
+        return self._decode_response(response)
+
     @staticmethod
     def _quote(value: str) -> str:
         return quote(value, safe="")
@@ -121,8 +133,22 @@ class BackQuantClient:
     def save_strategy(self, strategy_id: str, code: str) -> dict:
         return self._post(f"/api/backtest/strategies/{self._quote(strategy_id)}", json={"code": code})
 
+    def list_strategies(self, *, q: str | None = None, limit: int | None = None, offset: int | None = None) -> dict:
+        params: dict[str, str | int] = {}
+        if q is not None:
+            params["q"] = q
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
+        return self._get("/api/backtest/strategies", params=params or None)
+
     def get_strategy(self, strategy_id: str) -> dict:
         return self._get(f"/api/backtest/strategies/{self._quote(strategy_id)}")
+
+    def delete_strategy(self, strategy_id: str, *, cascade: bool = False) -> dict:
+        params = {"cascade": "true"} if cascade else None
+        return self._delete(f"/api/backtest/strategies/{self._quote(strategy_id)}", params=params)
 
     def compile_strategy(self, strategy_id: str, code: str | None = None) -> dict:
         payload = {"code": code} if code is not None else {}

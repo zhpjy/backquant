@@ -186,6 +186,64 @@ class BackQuantClientTestCase(unittest.TestCase):
         )
 
     @patch("app.cli.client.requests.Session")
+    def test_list_strategies_calls_expected_endpoint_with_filters(self, session_cls):
+        session = Mock()
+        session_cls.return_value = session
+        session.headers = {}
+        get_response = Mock()
+        get_response.status_code = 200
+        get_response.json.return_value = {"ok": True, "data": {"strategies": [], "total": 0}}
+        session.get.return_value = get_response
+
+        settings = CliSettings(
+            base_url="http://127.0.0.1:8088",
+            username="",
+            password="",
+            token="jwt-token",
+            timeout_seconds=10,
+            jobs_cache_path=None,
+        )
+        client = BackQuantClient(settings)
+
+        payload = client.list_strategies(q="demo", limit=20, offset=5)
+        self.assertEqual(payload["data"]["total"], 0)
+        self.assertEqual(session.headers["Authorization"], "jwt-token")
+        self.assertEqual(
+            session.get.call_args.args[0],
+            "http://127.0.0.1:8088/api/backtest/strategies",
+        )
+        self.assertEqual(session.get.call_args.kwargs["params"], {"q": "demo", "limit": 20, "offset": 5})
+
+    @patch("app.cli.client.requests.Session")
+    def test_delete_strategy_calls_expected_endpoint_with_cascade(self, session_cls):
+        session = Mock()
+        session_cls.return_value = session
+        session.headers = {}
+        delete_response = Mock()
+        delete_response.status_code = 200
+        delete_response.json.return_value = {"ok": True, "data": {"strategy_id": "demo", "deleted": True}}
+        session.delete.return_value = delete_response
+
+        settings = CliSettings(
+            base_url="http://127.0.0.1:8088",
+            username="",
+            password="",
+            token="jwt-token",
+            timeout_seconds=10,
+            jobs_cache_path=None,
+        )
+        client = BackQuantClient(settings)
+
+        payload = client.delete_strategy("demo", cascade=True)
+        self.assertTrue(payload["data"]["deleted"])
+        self.assertEqual(session.headers["Authorization"], "jwt-token")
+        self.assertEqual(
+            session.delete.call_args.args[0],
+            "http://127.0.0.1:8088/api/backtest/strategies/demo",
+        )
+        self.assertEqual(session.delete.call_args.kwargs["params"], {"cascade": "true"})
+
+    @patch("app.cli.client.requests.Session")
     def test_get_job_calls_expected_endpoint(self, session_cls):
         session = Mock()
         session_cls.return_value = session

@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 from click.testing import CliRunner
 
-from app.cli.errors import EXIT_LOCAL
+from app.cli.errors import EXIT_ARGUMENT, EXIT_LOCAL
 from app.cli.main import cli
 
 
@@ -53,7 +53,7 @@ class BqJobCommandTestCase(unittest.TestCase):
     @patch("app.cli.commands.job.BackQuantClient")
     def test_job_log_passthrough_remote_payload_and_cache_hit_values(self, client_cls, cache_cls):
         client = Mock()
-        client.get_job_log.return_value = {"lines": ["a", "b"], "next_offset": 2}
+        client.get_job_log.return_value = {"raw": "a\nb\n"}
         client_cls.return_value = client
 
         cache = Mock()
@@ -68,7 +68,33 @@ class BqJobCommandTestCase(unittest.TestCase):
         self.assertEqual(payload["data"]["job_id"], "job_demo")
         self.assertEqual(payload["data"]["file"], "/tmp/bar.py")
         self.assertEqual(payload["data"]["strategy_id"], "bar")
-        self.assertEqual(payload["data"]["remote"]["lines"], ["a", "b"])
+        self.assertEqual(payload["data"]["remote"]["raw"], "a\nb\n")
+        client.get_job_log.assert_called_once_with("job_demo", offset=None, tail=None)
+
+    @patch("app.cli.commands.job.JobCache")
+    @patch("app.cli.commands.job.BackQuantClient")
+    def test_job_log_tail_queries_incremental_log_api(self, client_cls, cache_cls):
+        client = Mock()
+        client.get_job_log.return_value = {"content": "last lines\n", "offset": 20, "next_offset": 31, "size": 11}
+        client_cls.return_value = client
+
+        cache = Mock()
+        cache.lookup.return_value = {"file": "/tmp/bar.py", "strategy_id": "bar"}
+        cache_cls.return_value = cache
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["job", "log", "--job-id", "job_demo", "--tail", "128"])
+
+        self.assertEqual(result.exit_code, 0)
+        payload = json.loads(result.output)
+        self.assertEqual(payload["data"]["remote"]["content"], "last lines\n")
+        client.get_job_log.assert_called_once_with("job_demo", offset=None, tail=128)
+
+    def test_job_log_rejects_offset_and_tail_together(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["job", "log", "--job-id", "job_demo", "--offset", "1", "--tail", "128"])
+
+        self.assertEqual(result.exit_code, EXIT_ARGUMENT)
 
     @patch("app.cli.commands.job.JobCache")
     @patch("app.cli.commands.job.BackQuantClient")

@@ -96,8 +96,10 @@ def register_job_commands(root: click.Group) -> None:
 
     @job_group.command(name="log")
     @click.option("--job-id", required=True)
+    @click.option("--offset", type=click.IntRange(min=0))
+    @click.option("--tail", type=click.IntRange(min=1))
     @click.pass_context
-    def log_command(ctx: click.Context, job_id: str) -> None:
+    def log_command(ctx: click.Context, job_id: str, offset: int | None, tail: int | None) -> None:
         def _impl() -> None:
             settings = ctx.obj["settings"]
             assert isinstance(settings, CliSettings)
@@ -105,7 +107,7 @@ def register_job_commands(root: click.Group) -> None:
             cache = JobCache(settings.jobs_cache_path)
 
             file_path, strategy_id = _cached_entry(cache, job_id)
-            remote = client.get_job_log(job_id)
+            remote = client.get_job_log(job_id, offset=offset, tail=tail)
             click.echo(
                 json_ok(
                     {

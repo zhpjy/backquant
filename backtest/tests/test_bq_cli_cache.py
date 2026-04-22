@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from app.cli.config import CliSettings
 from app.cli.cache import JobCache
+from app.cli.env import bq_env_file_path, load_env_file
 from app.cli.errors import CliError, EXIT_ARGUMENT, EXIT_LOCAL
 from app.cli.main import main
 from app.cli.output import json_error, json_ok
@@ -57,6 +58,33 @@ class BqCliFoundationTestCase(unittest.TestCase):
         self.assertEqual(settings.token, "token-123")
         self.assertEqual(settings.username, "")
         self.assertEqual(settings.password, "")
+
+    def test_load_env_file_reads_bq_values_without_overwriting_existing_env(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / ".env.bq"
+            env_path.write_text(
+                "BQ_BASE_URL=http://127.0.0.1:54321\nBQ_TOKEN=file-token\nBQ_TIMEOUT_SECONDS=18\n",
+                encoding="utf-8",
+            )
+            loaded = load_env_file(env_path, env={"BQ_TOKEN": "env-token", "KEEP": "1"})
+
+        self.assertEqual(loaded["BQ_BASE_URL"], "http://127.0.0.1:54321")
+        self.assertEqual(loaded["BQ_TOKEN"], "env-token")
+        self.assertEqual(loaded["BQ_TIMEOUT_SECONDS"], "18")
+        self.assertEqual(loaded["KEEP"], "1")
+
+    def test_load_env_file_returns_existing_env_when_file_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_path = Path(tmpdir) / ".env.bq"
+            loaded = load_env_file(env_path, env={"BQ_BASE_URL": "http://existing"})
+
+        self.assertEqual(loaded, {"BQ_BASE_URL": "http://existing"})
+
+    def test_bq_env_file_path_points_to_backtest_directory(self):
+        self.assertEqual(
+            bq_env_file_path(Path("/repo")),
+            Path("/repo/backtest/.env.bq"),
+        )
 
     def test_json_helpers_render_expected_shape(self):
         success_text = json_ok({"job_id": "job_demo"})

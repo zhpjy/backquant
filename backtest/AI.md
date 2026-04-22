@@ -8,13 +8,15 @@
 
 ```bash
 uv sync --project backtest
+cp backtest/.env.bq.example backtest/.env.bq
 ```
 
 这会为宿主机上的 `bq` 准备最小依赖环境。
+`backtest/bq` 会自动加载 `backtest/.env.bq`。
 
 ## 环境变量
 
-运行前需要配置：
+优先在 `backtest/.env.bq` 中配置：
 
 - `BQ_BASE_URL`
 - `BQ_TOKEN`
@@ -27,6 +29,8 @@ uv sync --project backtest
 可选：
 
 - `BQ_TIMEOUT_SECONDS`
+
+如果当前 shell 已经设置了同名环境变量，则 shell 中的值优先，不会被 `.env.bq` 覆盖。
 
 ## 调用入口
 

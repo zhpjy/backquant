@@ -4,19 +4,19 @@
 
 ## 初始化
 
-在仓库根目录执行：
+在 `backtest` 目录执行：
 
 ```bash
-uv sync --project backtest
-cp backtest/.env.bq.example backtest/.env.bq
+uv sync
+cp .env.bq.example .env.bq
 ```
 
 这会为宿主机上的 `bq` 准备最小依赖环境。
-`backtest/bq` 会自动加载 `backtest/.env.bq`。
+`./bq` 会自动加载 `./.env.bq`。
 
 ## 环境变量
 
-优先在 `backtest/.env.bq` 中配置：
+优先在 `./.env.bq` 中配置：
 
 - `BQ_BASE_URL`
 - `BQ_TOKEN`
@@ -34,10 +34,10 @@ cp backtest/.env.bq.example backtest/.env.bq
 
 ## 调用入口
 
-统一从仓库根目录调用：
+统一在 `backtest` 目录中调用：
 
 ```bash
-uv run --project backtest python backtest/bq ...
+./bq ...
 ```
 
 不要使用 `docker exec` 作为主调用路径。
@@ -45,12 +45,12 @@ uv run --project backtest python backtest/bq ...
 ## 常用命令
 
 ```bash
-uv run --project backtest python backtest/bq strategy create --file ./strategies/demo.py
-uv run --project backtest python backtest/bq strategy compile --file ./strategies/demo.py
-uv run --project backtest python backtest/bq strategy run --file ./strategies/demo.py --start 2020-01-01 --end 2020-12-31
-uv run --project backtest python backtest/bq job show --job-id <job_id>
-uv run --project backtest python backtest/bq job result --job-id <job_id>
-uv run --project backtest python backtest/bq job log --job-id <job_id>
+./bq strategy create --file ./strategies/demo.py
+./bq strategy compile --file ./strategies/demo.py
+./bq strategy run --file ./strategies/demo.py --start 2020-01-01 --end 2020-12-31
+./bq job show --job-id <job_id>
+./bq job result --job-id <job_id>
+./bq job log --job-id <job_id>
 ```
 
 ## 工作目录约定
@@ -58,4 +58,4 @@ uv run --project backtest python backtest/bq job log --job-id <job_id>
 - `--file` 路径相对当前工作目录解释
 - `./.bq/jobs.json` 写在当前工作目录下
 
-因此 AI 应在策略项目目录中执行 `uv run --project backtest python backtest/bq ...`
+因此 AI 应先进入 `backtest` 目录，再执行 `./bq ...`

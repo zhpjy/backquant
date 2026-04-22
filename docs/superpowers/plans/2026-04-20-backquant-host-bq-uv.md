@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 为宿主机上的 AI 提供稳定的 `./bin/bq` 入口，并使用 `backtest/pyproject.toml` 的最小 `uv` 环境运行现有 CLI。
+**Goal:** 为宿主机上的 AI 提供直接的 `uv run --project backtest python backtest/bq ...` 调用方式，并使用 `backtest/pyproject.toml` 的最小 `uv` 环境运行现有 CLI。
 
-**Architecture:** 保持 CLI 业务代码不变，只新增宿主机运行层。`backtest/pyproject.toml` 负责最小依赖，`bin/bq` 负责统一入口，`backtest/AI.md` 负责宿主机使用说明。
+**Architecture:** 保持 CLI 业务代码不变，只新增宿主机运行层。`backtest/pyproject.toml` 负责最小依赖，`backtest/AI.md` 负责宿主机使用说明，AI 与人工直接通过 `uv run --project backtest python backtest/bq ...` 调用现有入口。
 
 **Tech Stack:** Python, uv, shell script, Click, requests
 
@@ -37,34 +37,7 @@ package = false
 Run: `cd /home/zhpjy/.paseo/worktrees/39as1sap/idiotic-chipmunk && uv sync --project backtest`
 Expected: 成功创建或更新 `backtest/.venv`
 
-### Task 2: 增加统一入口脚本
-
-**Files:**
-- Create: `bin/bq`
-
-- [ ] **Step 1: 写入口脚本**
-
-```sh
-#!/usr/bin/env sh
-set -eu
-
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
-
-exec uv run --project "$REPO_ROOT/backtest" python "$REPO_ROOT/backtest/bq" "$@"
-```
-
-- [ ] **Step 2: 设置可执行权限**
-
-Run: `cd /home/zhpjy/.paseo/worktrees/39as1sap/idiotic-chipmunk && chmod +x bin/bq`
-Expected: `bin/bq` 可直接执行
-
-- [ ] **Step 3: 运行帮助命令验证**
-
-Run: `cd /home/zhpjy/.paseo/worktrees/39as1sap/idiotic-chipmunk && ./bin/bq --help`
-Expected: 输出 `bq` 顶层帮助
-
-### Task 3: 增加 AI 使用说明
+### Task 2: 增加 AI 使用说明
 
 **Files:**
 - Create: `backtest/AI.md`
@@ -90,14 +63,14 @@ uv sync --project backtest
 
 ## 调用方式
 
-统一使用仓库根目录下的：
+统一从仓库根目录执行：
 
 ```bash
-./bin/bq ...
+uv run --project backtest python backtest/bq ...
 ```
 ```
 
 - [ ] **Step 2: 验证文档与实际入口一致**
 
-Run: `cd /home/zhpjy/.paseo/worktrees/39as1sap/idiotic-chipmunk && ./bin/bq strategy --help`
+Run: `cd /home/zhpjy/.paseo/worktrees/39as1sap/idiotic-chipmunk && uv run --project backtest python backtest/bq strategy --help`
 Expected: 成功输出 `strategy` 子命令帮助

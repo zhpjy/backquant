@@ -37,7 +37,7 @@ cp backtest/.env.bq.example backtest/.env.bq
 统一从仓库根目录调用：
 
 ```bash
-./bin/bq ...
+uv run --project backtest python backtest/bq ...
 ```
 
 不要使用 `docker exec` 作为主调用路径。
@@ -45,12 +45,12 @@ cp backtest/.env.bq.example backtest/.env.bq
 ## 常用命令
 
 ```bash
-./bin/bq strategy create --file ./strategies/demo.py
-./bin/bq strategy compile --file ./strategies/demo.py
-./bin/bq strategy run --file ./strategies/demo.py --start 2020-01-01 --end 2020-12-31
-./bin/bq job show --job-id <job_id>
-./bin/bq job result --job-id <job_id>
-./bin/bq job log --job-id <job_id>
+uv run --project backtest python backtest/bq strategy create --file ./strategies/demo.py
+uv run --project backtest python backtest/bq strategy compile --file ./strategies/demo.py
+uv run --project backtest python backtest/bq strategy run --file ./strategies/demo.py --start 2020-01-01 --end 2020-12-31
+uv run --project backtest python backtest/bq job show --job-id <job_id>
+uv run --project backtest python backtest/bq job result --job-id <job_id>
+uv run --project backtest python backtest/bq job log --job-id <job_id>
 ```
 
 ## 工作目录约定
@@ -58,4 +58,4 @@ cp backtest/.env.bq.example backtest/.env.bq
 - `--file` 路径相对当前工作目录解释
 - `./.bq/jobs.json` 写在当前工作目录下
 
-因此 AI 应在策略项目目录中执行 `./bin/bq ...`
+因此 AI 应在策略项目目录中执行 `uv run --project backtest python backtest/bq ...`

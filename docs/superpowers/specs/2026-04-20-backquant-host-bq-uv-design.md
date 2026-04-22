@@ -17,7 +17,7 @@
 
 ## 设计选择
 
-### 方案 A：`backtest/pyproject.toml` + 宿主机 `uv` + 根目录 `bin/bq`
+### 方案 A：`backtest/pyproject.toml` + 宿主机直接 `uv run`
 
 选用此方案。
 
@@ -25,15 +25,14 @@
 
 - 在 `backtest/` 下新增一个只服务 `bq` CLI 的 `pyproject.toml`。
 - 依赖仅包含 `click` 和 `requests`。
-- 在仓库根新增一个薄包装脚本 `bin/bq`。
-- `bin/bq` 使用 `uv run --project <repo>/backtest python <repo>/backtest/bq ...` 启动 CLI。
+- AI 与人工统一使用 `uv run --project <repo>/backtest python <repo>/backtest/bq ...` 启动 CLI。
 
 优点：
 
 - 宿主机和 AI 直接使用同一份本地文件。
 - 不影响 Docker 后端现有 `requirements.txt` 和镜像构建。
 - `pyproject.toml` 范围限定在 `backtest/`，不会误导为整个仓库切换到 `uv`。
-- AI 统一调用 `./bin/bq`，命令稳定。
+- 不额外引入包装脚本，结构更简单。
 
 缺点：
 
@@ -48,15 +47,6 @@
 - 会让人误以为整个仓库都迁移到 `uv`。
 - 与当前 Docker 依赖管理边界不够清晰。
 
-### 方案 C：仅文档化 `uv run` 长命令，不提供包装脚本
-
-不选。
-
-原因：
-
-- 对 AI 来说命令过长，不利于稳定调用。
-- 更容易出现工作目录错误。
-
 ## 文件职责
 
 ### `backtest/pyproject.toml`
@@ -64,15 +54,10 @@
 - 定义宿主机运行 `bq` 的最小 Python 依赖。
 - 不参与 Docker 镜像依赖安装。
 
-### `bin/bq`
-
-- 作为 AI 和人工统一调用入口。
-- 负责定位仓库根目录，并将参数透传给 `backtest/bq`。
-
 ### `backtest/AI.md`
 
 - 面向 AI 使用场景说明宿主机运行方式。
-- 说明如何初始化 `uv` 环境、需要哪些环境变量、如何调用 `./bin/bq`。
+- 说明如何初始化 `uv` 环境、需要哪些环境变量、如何调用 `uv run --project backtest python backtest/bq ...`。
 
 ## 行为约束
 
@@ -85,7 +70,7 @@
 
 1. 在宿主机执行 `uv sync --project backtest` 初始化最小依赖。
 2. 配置 `BQ_BASE_URL` 与鉴权环境变量。
-3. AI 与人工统一使用 `./bin/bq ...`。
+3. AI 与人工统一使用 `uv run --project backtest python backtest/bq ...`。
 
 ## 风险与取舍
 
